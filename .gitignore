@@ -9,3 +9,4 @@ session_logs.txt
 Snapshots copy
 temp_map.html
 download_records.csv
+*.csv
