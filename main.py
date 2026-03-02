@@ -7,6 +7,7 @@ import geopandas as gpd
 import rasterio
 from rasterio.warp import transform_bounds
 import ee
+import re
 import requests
 import os
 import csv
@@ -15,6 +16,75 @@ from datetime import datetime, timedelta
 import tkintermapview
 from tkcalendar import Calendar
 import time
+import psycopg2
+from psycopg2 import extras
+
+class GeodatabaseManager:
+    def __init__(self, host="localhost", dbname="ai4caf_db", user="postgres", password=""):
+        self.params = {"host": host, "dbname": dbname, "user": user, "password": password}
+
+    def update_params(self, host, db, user, pw):
+        self.params = {"host": host, "dbname": db, "user": user, "password": pw}
+
+    def test_connection(self):
+        try:
+            conn = psycopg2.connect(**self.params, connect_timeout=3)
+            conn.close()
+            return True, "Connected successfully!"
+        except Exception as e:
+            return False, str(e).split('\n')[0]
+
+    def setup_tables(self):
+        commands = [
+            "CREATE EXTENSION IF NOT EXISTS postgis;",
+            """CREATE TABLE IF NOT EXISTS satellite_inventory (
+                id SERIAL PRIMARY KEY,
+                acquisition_date TIMESTAMP,
+                file_name TEXT,
+                dataset TEXT,
+                crs TEXT,
+                file_path TEXT UNIQUE,
+                location_geom GEOMETRY(Polygon, 4326),
+                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );""",
+            "CREATE INDEX IF NOT EXISTS idx_geom ON satellite_inventory USING GIST (location_geom);"
+        ]
+        try:
+            with psycopg2.connect(**self.params) as conn:
+                with conn.cursor() as cur:
+                    for cmd in commands: cur.execute(cmd)
+                conn.commit()
+            return True
+        except: return False
+
+    def push_metadata(self, meta, log_func=None):
+        try:
+            # 1. Get the full local path from the app
+            full_path = meta["Path"]
+            
+            # 2. Get the current Project Folder (the part we want to keep)
+            # Example: 'C:/Data/Project_Alpha/image.tif' -> 'Project_Alpha/image.tif'
+            data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Data")
+            relative_path = os.path.relpath(full_path, data_dir).replace("\\", "/")
+
+            # 3. Coordinate Parsing (Existing)
+            nums = re.findall(r"[-+]?\d*\.\d+|\d+", meta["Bounds"])
+            y, x = float(nums[0]), float(nums[1])
+            offset = 0.05 
+            wkt = f"SRID=4326;POLYGON(({x-offset} {y-offset}, {x+offset} {y-offset}, {x+offset} {y+offset}, {x-offset} {y+offset}, {x-offset} {y-offset}))"
+
+            query = """
+                INSERT INTO satellite_inventory (acquisition_date, file_name, dataset, crs, file_path, location_geom)
+                VALUES (%s, %s, %s, %s, %s, ST_GeomFromEWKT(%s))
+                ON CONFLICT (file_path) DO UPDATE SET acquisition_date = EXCLUDED.acquisition_date;
+            """
+            with psycopg2.connect(**self.params) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, (meta["Date"], meta["File Name"], meta["Dataset"], meta["CRS"], relative_path, wkt))
+                conn.commit()
+            if log_func: log_func(f"Database: Saved relative path for {meta['Date']}")
+        except Exception as e:
+            if log_func: log_func(f"DB Error: {str(e)[:40]}")
 
 # Persistent Storage
 HISTORY_FILE = "project_history.txt"
@@ -53,6 +123,9 @@ class GEE_Local_Downloader_App:
         self.tracker_running = False
         self.is_closing = False
         self.is_batch_loading = False  # The master switch for zoom behavior
+        self.db_manager = GeodatabaseManager()
+        self.db_manager = GeodatabaseManager(password="YOUR_DB_PASSWORD")
+        threading.Thread(target=self.db_manager.setup_tables, daemon=True).start()
         
         # --- Band Variables ---
         self.s2_bands = {
@@ -659,6 +732,58 @@ class GEE_Local_Downloader_App:
         self.layers_tree.bind("<Button-3>", self.show_layers_context_menu)
 
         # ==========================================
+        # --- TAB 5: GEODATABASE ---
+        # ==========================================
+        self.tab_db = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(self.tab_db, text=" 🗄️ Database ")
+
+        db_f = ttk.LabelFrame(self.tab_db, text=" PostGIS Connection Settings ", padding=15)
+        db_f.pack(fill="x", pady=5)
+
+        # DB Variables
+        self.db_host = tk.StringVar(value="localhost")
+        self.db_name = tk.StringVar(value="ai4caf_db")
+        self.db_user = tk.StringVar(value="postgres")
+        self.db_pass = tk.StringVar(value="")
+
+        # Grid Layout for Credentials
+        fields = [("Host:", self.db_host), ("Database:", self.db_name), ("User:", self.db_user)]
+        for i, (label, var) in enumerate(fields):
+            ttk.Label(db_f, text=label).grid(row=i, column=0, sticky="w", pady=5)
+            ttk.Entry(db_f, textvariable=var).grid(row=i, column=1, sticky="ew", padx=(10, 0))
+        
+        ttk.Label(db_f, text="Password:").grid(row=3, column=0, sticky="w", pady=5)
+        self.ent_db_pass = ttk.Entry(db_f, textvariable=self.db_pass, show="*")
+        self.ent_db_pass.grid(row=3, column=1, sticky="ew", padx=(10, 0))
+        db_f.columnconfigure(1, weight=1)
+
+        self.lbl_db_status = ttk.Label(self.tab_db, text="Status: Disconnected", foreground="gray")
+        self.lbl_db_status.pack(pady=10)
+
+        btn_f = ttk.Frame(self.tab_db)
+        btn_f.pack(fill="x", pady=5)
+
+        ttk.Button(btn_f, text="Test Connection", 
+                   command=self.ui_test_db).pack(side="left", expand=True, fill="x", padx=(0, 2))
+        ttk.Button(btn_f, text="Initialize DB", 
+                   command=self.ui_setup_db).pack(side="left", expand=True, fill="x", padx=2)
+        ttk.Button(btn_f, text="🚀 Sync History", 
+                   command=self.sync_all_to_db).pack(side="left", expand=True, fill="x", padx=2)
+        ttk.Button(btn_f, text="🧹 Clean Links", 
+                   command=self.prune_ghost_records).pack(side="left", expand=True, fill="x", padx=(2, 0))
+
+        # --- PATH MIGRATION TOOL ---
+        mig_f = ttk.LabelFrame(self.tab_db, text=" 🚀 Deployment & Migration ", padding=10)
+        mig_f.pack(fill="x", pady=10)
+        
+        ttk.Label(mig_f, text="Production Root Path (NAS/Server):", font=("Arial", 8, "bold")).pack(anchor="w")
+        self.nas_root_var = tk.StringVar(value="//SERVER_IP/Shared_Folder/") # More generic placeholder
+        ttk.Entry(mig_f, textvariable=self.nas_root_var).pack(fill="x", pady=5)
+        
+        ttk.Button(mig_f, text="Finalize Deployment Paths", 
+                   command=self.ui_migrate_paths).pack(fill="x")
+
+        # ==========================================
         # --- RIGHT PANEL: THE MAP ---
         # ==========================================
         script_directory = os.path.dirname(os.path.abspath(__file__))
@@ -721,6 +846,79 @@ class GEE_Local_Downloader_App:
         style.configure("Splash.Horizontal.TProgressbar", background='#00a8e8', thickness=6)
         self.lock_progress = ttk.Progressbar(self.splash_card, orient="horizontal", length=350, mode="indeterminate", style="Splash.Horizontal.TProgressbar")
         self.lock_progress.pack(pady=5)
+
+    def prune_ghost_records(self):
+        """Deletes database rows where the physical .tif file is missing from the disk."""
+        if not messagebox.askyesno("Confirm Prune", "This will scan your disk and delete database records that have no matching .tif file. Proceed?"):
+            return
+
+        def run_prune():
+            try:
+                # 1. Get all records from the DB
+                with psycopg2.connect(**self.db_manager.params) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT id, file_path FROM satellite_inventory;")
+                        records = cur.fetchall()
+                        
+                        deleted_count = 0
+                        script_dir = os.path.dirname(os.path.abspath(__file__))
+                        data_root = os.path.join(script_dir, "Data")
+
+                        for db_id, db_path in records:
+                            # Reconstruct the full path to check if it exists
+                            # If it's a relative path starting with 'Project_...', we join it with Data root
+                            full_check_path = db_path if os.path.isabs(db_path) else os.path.join(data_root, db_path)
+                            
+                            if not os.path.exists(full_check_path):
+                                # 2. If file is missing, DELETE the row
+                                cur.execute("DELETE FROM satellite_inventory WHERE id = %s;", (db_id,))
+                                deleted_count += 1
+                
+                self.log(f"Database Maintenance: Removed {deleted_count} ghost records.")
+                messagebox.showinfo("Prune Complete", f"Cleaned up {deleted_count} records with missing files.")
+            except Exception as e:
+                self.log(f"Prune Error: {e}")
+
+        threading.Thread(target=run_prune, daemon=True).start()
+
+    def ui_migrate_paths(self):
+        new_root = self.nas_root_var.get().strip()
+        if not new_root: return
+        
+        if not messagebox.askyesno("Confirm Migration", f"This will rewrite all file paths in 'ai4caf_db' to point to {new_root}.\n\nProceed?"):
+            return
+
+        try:
+            # We look for paths that don't start with / or // (meaning they are relative)
+            # and prepend the new NAS root.
+            query = "UPDATE satellite_inventory SET file_path = %s || file_path WHERE file_path NOT LIKE '//%' AND file_path NOT LIKE '/%';"
+            
+            with psycopg2.connect(**self.db_manager.params) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, (new_root,))
+                conn.commit()
+            
+            self.log(f"Migration: All database records updated to NAS root: {new_root}")
+            messagebox.showinfo("Migration Complete", "Database paths are now finalized for NAS/Dashboard use.")
+        except Exception as e:
+            messagebox.showerror("Migration Error", str(e))
+
+    def ui_test_db(self):
+        self.db_manager.update_params(self.db_host.get(), self.db_name.get(), self.db_user.get(), self.db_pass.get())
+        success, msg = self.db_manager.test_connection()
+        if success:
+            self.lbl_db_status.config(text="✅ Connected to PostGIS", foreground="#2a9d8f")
+            self.log("Database: Connection Verified.")
+        else:
+            self.lbl_db_status.config(text=f"❌ Error: {msg[:30]}...", foreground="#d62828")
+            messagebox.showerror("DB Error", msg)
+
+    def ui_setup_db(self):
+        if self.db_manager.setup_tables():
+            messagebox.showinfo("Success", "PostGIS Extension enabled and 'satellite_inventory' table created.")
+            self.log("Database: Tables Initialized.")
+        else:
+            messagebox.showerror("Error", "Initialization failed. Check if PostGIS is installed on your server.")
 
     def take_map_snapshot(self):
         """Captures the map canvas with pixel-perfect accuracy using modern DPI scaling detection."""
@@ -2434,17 +2632,20 @@ class GEE_Local_Downloader_App:
         threading.Thread(target=lambda: (ee.Authenticate(auth_mode='localhost'), self.check_auth_status()), daemon=True).start()
 
     def find_available_dates(self):
-        # 1. Capture current values from the UI
+        # 1. Capture current values from the UI (IN THE MAIN THREAD)
         path = self.input_file_path.get()
         m_roi = self.manual_roi_bounds
         raw_date_text = self.target_date_var.get().strip()
         clean_date_text = raw_date_text[:10]
+        
+        # ---> THE THREAD-SAFETY FIX: Extract Tkinter variables HERE <---
+        ds_name = self.dataset_var.get()
+        sort_clouds = self.sort_by_cloud_var.get()
 
-        # THE FIX: Ensure the path is an actual file, not the default placeholder
         has_file = bool(path and not path.startswith("--"))
         has_manual = m_roi is not None
 
-        # 2. VALIDATION (Main Thread): Do not start thread if data is missing
+        # 2. VALIDATION: Do not start thread if data is missing
         if not has_file and not has_manual:
             messagebox.showwarning("Missing Area", 
                                    "Please annotate an Area of Interest (AOI) or load a spatial file first.\n\n"
@@ -2461,12 +2662,13 @@ class GEE_Local_Downloader_App:
         self.available_dates_dropdown.config(values=[])
         self.available_dates_dropdown.set("Scanning Earth Engine servers. Please wait...")
         
-        # 4. Start the background worker
-        # Pass a clean None if it was just the placeholder, preventing thread crashes
+        # 4. Start the background worker (passing the safe variables)
         valid_path = path if has_file else None
-        threading.Thread(target=self._search_dates_worker, args=(valid_path, m_roi, target_date), daemon=True).start()
+        threading.Thread(target=self._search_dates_worker, 
+                         args=(valid_path, m_roi, target_date, ds_name, sort_clouds), 
+                         daemon=True).start()
 
-    def _search_dates_worker(self, path, m_roi, target_date):
+    def _search_dates_worker(self, path, m_roi, target_date, ds, sort_clouds):
         try:
             # --- 0. UI RESET ---
             self.root.after(0, lambda: self.available_dates_dropdown.config(values=[]))
@@ -2482,12 +2684,11 @@ class GEE_Local_Downloader_App:
                 b = m_roi
 
             roi = ee.Geometry.Rectangle([b[0], b[1], b[2], b[3]])
-            ds = self.dataset_var.get()
             self.log(f"Scanning for {ds} near {target_date.strftime('%Y-%m-%d')}...")
 
-            # 2. Set Dynamic Window
-            start_date = (target_date - timedelta(days=180)).strftime('%Y-%m-%d')
-            end_date = (target_date + timedelta(days=180)).strftime('%Y-%m-%d')
+            # 2. Set Dynamic Window (+/- 90 days for a 180-day window)
+            start_date = (target_date - timedelta(days=90)).strftime('%Y-%m-%d')
+            end_date = (target_date + timedelta(days=90)).strftime('%Y-%m-%d')
 
             # 3. Fetch Collection
             def get_info(img):
@@ -2521,53 +2722,88 @@ class GEE_Local_Downloader_App:
                 ))
                 return
 
-            # --- 4. CLEAN LIST & ADD TIMELINE LABELS (FIXED FOR TIME) ---
+            # --- 4. CLEAN LIST & ADD TIMELINE LABELS ---
             combined = []
+            target_dt_only = target_date.date()
+
             for info, raw in zip(info_list, raw_dates):
-                # ✅ FIX: Keep the full YYYY-MM-DD HH:mm (16 characters)
-                full_timestamp = str(raw)[:16] 
+                full_timestamp = str(raw)[:16]
+                pass_dt_only = datetime.strptime(full_timestamp[:10], "%Y-%m-%d").date()
                 
-                # We still compare just the date for the (TARGET/PAST/FUTURE) labels
-                date_only_str = full_timestamp[:10]
-                pass_dt = datetime.strptime(date_only_str, "%Y-%m-%d")
-                
-                if pass_dt.date() < target_date.date():
-                    timeline_label = " (PAST)"
-                elif pass_dt.date() > target_date.date():
-                    timeline_label = " (FUTURE)"
+                pass_dt = datetime.strptime(full_timestamp, "%Y-%m-%d %H:%M")
+                target_noon = target_date.replace(hour=12, minute=0)
+                proximity = abs((pass_dt - target_noon).total_seconds())
+
+                if pass_dt_only < target_dt_only:
+                    base_label = " (PAST)"
+                elif pass_dt_only > target_dt_only:
+                    base_label = " (FUTURE)"
                 else:
-                    timeline_label = " (TARGET)"
-                
-                labeled_info = f"{info}{timeline_label}"
-                # ✅ FIX: Store the full timestamp instead of clean_date_only
-                combined.append((labeled_info, full_timestamp))
+                    base_label = " (TARGET)"
+
+                combined.append((info, full_timestamp, base_label, proximity))
             
-            unique_combined = list(set(combined))
+            # Remove exact duplicates by timestamp
+            unique_dict = {}
+            for item in combined:
+                if item[1] not in unique_dict:
+                    unique_dict[item[1]] = item
+            unique_combined = list(unique_dict.values())
 
-            # --- 5. SMART SORTING ---
-            if self.sort_by_cloud_var.get() and ("Sentinel-2" in ds or "Landsat" in ds):
-                unique_combined.sort(key=lambda x: float(x[0].split("Cloud: ")[1].split("%")[0]))
-            else:
-                def sort_priority(item):
-                    display_text, ts_str = item[0], item[1]
-                    priority = 0 if "(TARGET)" in display_text else 1
-                    # ✅ FIX: Sort by full timestamp
-                    dt_val = datetime.strptime(ts_str, "%Y-%m-%d %H:%M").timestamp()
-                    return (priority, dt_val)
-                unique_combined.sort(key=sort_priority)
+            # Find the absolute closest pass across the entire +/- 90 day window
+            closest_item = min(unique_combined, key=lambda x: x[3])
+            closest_ts = closest_item[1]
 
-            display_values = [x[0] for x in unique_combined]
+            final_list = []
+            for info, ts, label, prox in unique_combined:
+                # If there's no exact TARGET, highlight the CLOSEST one instead
+                if ts == closest_ts and label != " (TARGET)":
+                    label = " (CLOSEST MATCH)"
+                
+                display_text = f"{info}{label}"
+                final_list.append((display_text, prox))
 
-            # --- PHASE 6: UPDATE UI ---
-            self.root.after(0, lambda: (
-                self.available_dates_dropdown.config(values=display_values),
-                self.available_dates_dropdown.set(display_values[0]),
-                self.available_dates_dropdown.focus_set()
-            ))
+            # --- 5. CATEGORICAL HIERARCHY SORT ---
+            def master_sort_key(item):
+                display_text, proximity = item
+                
+                # 1. Assign Rank (0 is top, 3 is bottom)
+                if "(TARGET)" in display_text: rank = 0
+                elif "(CLOSEST MATCH)" in display_text: rank = 1
+                elif "(FUTURE)" in display_text: rank = 2
+                else: rank = 3 # (PAST)
+                
+                # 2. Extract Clouds for secondary sorting
+                cloud_val = 100
+                if sort_clouds and "Cloud: " in display_text:
+                    try:
+                        cloud_val = float(display_text.split("Cloud: ")[1].split("%")[0])
+                    except: pass 
+
+                if sort_clouds:
+                    # Sort by Rank, then Cloud quality, then Proximity
+                    return (rank, cloud_val, proximity)
+                # Sort by Rank, then Proximity
+                return (rank, proximity)
+
+            final_list.sort(key=master_sort_key)
+            display_values = [x[0] for x in final_list]
+
+            # --- 6. UPDATE UI ---
+            def update_ui():
+                if display_values:
+                    self.available_dates_dropdown.config(values=display_values)
+                    self.available_dates_dropdown.set(display_values[0])
+                    # Auto-expand the dropdown!
+                    self.available_dates_dropdown.focus_set()
+                    self.available_dates_dropdown.event_generate('<Down>')
+                
+            self.root.after(0, update_ui)
             self.log(f"Found {len(display_values)} unique passes with timestamps.")
 
         except Exception as e:
             self.log(f"Scanner Error: {e}")
+            self.root.after(0, lambda: self.available_dates_dropdown.set("Error during scan. Check logs."))
 
     def _pick_alternative_pass(self, schedule_idx, callback):
         """Allows choosing between Target, Past, and Future candidates for a specific month."""
@@ -2597,6 +2833,27 @@ class GEE_Local_Downloader_App:
 
         ttk.Button(pick_win, text="Select This Date", command=select).pack(pady=10)
 
+    def sync_all_to_db(self):
+        """Pushes every record from your RECORDS_FILE (CSV) into PostGIS."""
+        if not os.path.exists(RECORDS_FILE):
+            messagebox.showerror("Error", "No download history found to sync.")
+            return
+            
+        self.log("Database: Starting bulk sync from CSV...")
+        
+        def run_sync():
+            count = 0
+            with open(RECORDS_FILE, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    # 'row' matches the 'meta' format exactly
+                    self.db_manager.push_metadata(row, self.log)
+                    count += 1
+            self.log(f"Database: Bulk sync complete. {count} rows processed.")
+            messagebox.showinfo("Sync Complete", f"Successfully processed {count} records into ai4caf_db.")
+
+        threading.Thread(target=run_sync, daemon=True).start()
+
     def start_download_thread(self):
         """PSA-Grade Downloader: Features Live Scouting and 180-day 'Freedom' Dropdowns."""
         path, m_roi = self.input_file_path.get(), self.manual_roi_bounds
@@ -2605,6 +2862,13 @@ class GEE_Local_Downloader_App:
         if not path and not m_roi: 
             messagebox.showwarning("Missing Area", "Please annotate an AOI first.")
             return
+
+        self.db_manager.update_params(
+            self.db_host.get(), 
+            self.db_name.get(), 
+            self.db_user.get(), 
+            self.db_pass.get()
+        )
 
         # THE CRITICAL RESTORE: Defining 'b' so 'roi' doesn't crash
         try:
@@ -2669,15 +2933,69 @@ class GEE_Local_Downloader_App:
                     candidates = [f['properties'] for f in raw]
                     
                     if candidates:
-                        # [Keep your existing sorting logic]
-                        best = candidates[0]
+                        target_dt_only = dt.date()
+                        target_noon = dt.replace(hour=12, minute=0)
+                        
+                        processed_candidates = []
+                        for c in candidates:
+                            pass_dt = datetime.strptime(c['date'], "%Y-%m-%d %H:%M")
+                            pass_dt_only = pass_dt.date()
+                            proximity = abs((pass_dt - target_noon).total_seconds())
+                            
+                            if pass_dt_only < target_dt_only:
+                                base_label = " (PAST)"
+                            elif pass_dt_only > target_dt_only:
+                                base_label = " (FUTURE)"
+                            else:
+                                base_label = " (TARGET)"
+                                
+                            processed_candidates.append({
+                                'date': c['date'],
+                                'clouds': c['clouds'],
+                                'label': base_label,
+                                'proximity': proximity
+                            })
+                            
+                        # Sort by proximity to target to find the absolute closest
+                        processed_candidates.sort(key=lambda x: x['proximity'])
+                        
+                        # Identify closest
+                        closest = processed_candidates[0]
+                        if closest['label'] != " (TARGET)":
+                            closest['label'] = " (CLOSEST MATCH)"
+
+                        # --- THE CATEGORICAL HIERARCHY SORT ---
+                        sort_clouds = self.sort_by_cloud_var.get()
+                        
+                        def master_sort(item):
+                            # 1. Strict Rank Assignment
+                            if "(TARGET)" in item['label']: rank = 0
+                            elif "(CLOSEST MATCH)" in item['label']: rank = 1
+                            elif "(FUTURE)" in item['label']: rank = 2
+                            else: rank = 3 # (PAST)
+                                
+                            # 2. Extract Clouds safely
+                            try: cloud_val = float(item['clouds'])
+                            except: cloud_val = 100
+                            
+                            # 3. Apply sorting
+                            if sort_clouds:
+                                return (rank, cloud_val, item['proximity'])
+                            else:
+                                return (rank, item['proximity'])
+
+                        # Apply the master sort
+                        processed_candidates.sort(key=master_sort)
+
+                        best = processed_candidates[0]
                         scouted_schedule.append({
                             'target': t_date, 'actual': best['date'], 
-                            'current_selection': f"{best['date']} | {best['clouds']}%",
-                            'options': [f"{c['date']} | {c['clouds']}%" for c in candidates]
+                            'current_selection': f"{best['date']} | {best['clouds']}% {best['label']}",
+                            'options': [f"{c['date']} | {c['clouds']}% {c['label']}" for c in processed_candidates]
                         })
                     else:
                         scouted_schedule.append({'target': t_date, 'actual': "None", 'options': []})
+                        
                 except Exception as ee_err:
                     self.root.after(0, lambda e=ee_err: safe_log(idx, f"EE ERROR: {str(e)[:50]}..."))
                     scouted_schedule.append({'target': t_date, 'actual': "None", 'options': []})
@@ -2930,6 +3248,7 @@ class GEE_Local_Downloader_App:
                         "Bounds": f"Rect({miny:.2f}, {minx:.2f})", "Path": final_date_path
                     }
                     self.save_metadata_to_file(meta)
+                    threading.Thread(target=self.db_manager.push_metadata, args=(meta, self.log), daemon=True).start()
                     self.root.after(0, lambda rid=row_iid, m=meta: self.record_table.item(rid, values=("✅ Found", m["Date"], m["File Name"], m["Dataset"], m["CRS"], m["Bounds"], m["Path"])))
                 
                 batch_pct = ((date_idx + 1) / len(date_list)) * 100
