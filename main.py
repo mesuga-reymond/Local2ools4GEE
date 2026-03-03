@@ -456,20 +456,33 @@ class GEE_Local_Downloader_App:
             os._exit(0)
 
     def create_widgets(self):
+        # --- DYNAMIC NOTEBOOK STYLING ---
         style = ttk.Style()
-        # Adding horizontal padding (10) and vertical padding (5) to tabs
-        style.configure("TNotebook.Tab", padding=[10, 5], font=("Segoe UI", 9))
+        style.theme_use('clam') 
+
+        # Base style for all tabs
+        style.configure("TNotebook.Tab", 
+                        padding=[8, 4], 
+                        font=("Segoe UI", 9),
+                        background="#e1e1e1")
+
+        # THE "EXPANDER" LOGIC: Grow the tab and bold the text when selected
+        style.map("TNotebook.Tab",
+                  padding=[("selected", [12, 6])], 
+                  font=[("selected", ("Segoe UI", 9, "bold"))],
+                  background=[("selected", "#ffffff")],
+                  foreground=[("selected", "#0077b6")])
 
         paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         paned.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # 2. BUMP WIDTH: Change 420 to 500
-        self.left_panel = ttk.Frame(paned, width=500) 
+        # WIDEN PANEL: Increased to 520 to allow room for the expanded "Database" name
+        self.left_panel = ttk.Frame(paned, width=520) 
         self.left_panel.pack_propagate(False) 
         
         self.right_frame = ttk.Frame(paned)
         
-        # 3. Use 'weight' so you can manually drag the divider
+        # Divider weights
         paned.add(self.left_panel, weight=0) 
         paned.add(self.right_frame, weight=1)
 
@@ -1678,10 +1691,10 @@ class GEE_Local_Downloader_App:
         grid_f.pack(fill="x")
         
         # Define columns: Label, Entry, Calendar Button, Help/Blank
-        grid_f.columnconfigure(0, weight=0, minsize=75) 
-        grid_f.columnconfigure(1, weight=1)             
-        grid_f.columnconfigure(2, weight=0, minsize=40) # Increased from 25
-        grid_f.columnconfigure(3, weight=0, minsize=25) # Help icon column
+        grid_f.columnconfigure(0, weight=0, minsize=80)  # Labels (Start/End)
+        grid_f.columnconfigure(1, weight=1)              # Entry boxes
+        grid_f.columnconfigure(2, weight=0, minsize=45)  # Calendar buttons
+        grid_f.columnconfigure(3, weight=0, minsize=30)
 
         # --- ROW 1: START DATE ---
         ttk.Label(grid_f, text="Start:").grid(row=0, column=0, sticky="w", pady=2)
