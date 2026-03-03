@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+        <html>
+        <head>
+            <title>AI4CAF Interactive Dashboard</title>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+            <style>
+                body { padding: 0; margin: 0; }
+                #map { height: 100vh; width: 100vw; }
+            </style>
+        </head>
+        <body>
+            <div id="map"></div>
+            <script>
+                // Initialize the map (Centered roughly on the Philippines)
+                var map = L.map('map').setView([12.8797, 121.7740], 5);
+
+                // Add a beautiful, clean base map
+                var cartoDB = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; OpenStreetMap &copy; CARTO'
+                }).addTo(map);
+
+                var baseMaps = {
+                    "Base Map": cartoDB
+                };
+
+                var overlayMaps = {};
+        
+                var layer_0 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34"] = layer_0;
+            layer_0.addTo(map);
+
+                var layer_1 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T1"] = layer_1;
+            
+                var layer_2 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T10',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T10"] = layer_2;
+            
+                var layer_3 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T11',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T11"] = layer_3;
+            
+                var layer_4 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T12',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T12"] = layer_4;
+            
+                var layer_5 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T13',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T13"] = layer_5;
+            
+                var layer_6 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T14',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T14"] = layer_6;
+            
+                var layer_7 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T15',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T15"] = layer_7;
+            
+                var layer_8 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T16',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T16"] = layer_8;
+            
+                var layer_9 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T17',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T17"] = layer_9;
+            
+                var layer_10 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T18',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T18"] = layer_10;
+            
+                var layer_11 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T19',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T19"] = layer_11;
+            
+                var layer_12 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T2',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T2"] = layer_12;
+            
+                var layer_13 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T20',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T20"] = layer_13;
+            
+                var layer_14 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T21',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T21"] = layer_14;
+            
+                var layer_15 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T22',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T22"] = layer_15;
+            
+                var layer_16 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T23',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T23"] = layer_16;
+            
+                var layer_17 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T24',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T24"] = layer_17;
+            
+                var layer_18 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T25',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T25"] = layer_18;
+            
+                var layer_19 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T26',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T26"] = layer_19;
+            
+                var layer_20 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T27',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T27"] = layer_20;
+            
+                var layer_21 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T28',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T28"] = layer_21;
+            
+                var layer_22 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T29',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T29"] = layer_22;
+            
+                var layer_23 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T3',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T3"] = layer_23;
+            
+                var layer_24 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T30',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T30"] = layer_24;
+            
+                var layer_25 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T31',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T31"] = layer_25;
+            
+                var layer_26 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T32',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T32"] = layer_26;
+            
+                var layer_27 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T33',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T33"] = layer_27;
+            
+                var layer_28 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T34"] = layer_28;
+            
+                var layer_29 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T35',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T35"] = layer_29;
+            
+                var layer_30 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T36',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T36"] = layer_30;
+            
+                var layer_31 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T37',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T37"] = layer_31;
+            
+                var layer_32 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T38',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T38"] = layer_32;
+            
+                var layer_33 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T39',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T39"] = layer_33;
+            
+                var layer_34 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T4',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T4"] = layer_34;
+            
+                var layer_35 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T40',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T40"] = layer_35;
+            
+                var layer_36 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T41',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T41"] = layer_36;
+            
+                var layer_37 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T42',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T42"] = layer_37;
+            
+                var layer_38 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T43',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T43"] = layer_38;
+            
+                var layer_39 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T44',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T44"] = layer_39;
+            
+                var layer_40 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T45',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T45"] = layer_40;
+            
+                var layer_41 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T46',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T46"] = layer_41;
+            
+                var layer_42 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T47',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T47"] = layer_42;
+            
+                var layer_43 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T48',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T48"] = layer_43;
+            
+                var layer_44 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T49',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T49"] = layer_44;
+            
+                var layer_45 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T5',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T5"] = layer_45;
+            
+                var layer_46 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T50',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T50"] = layer_46;
+            
+                var layer_47 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T51',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T51"] = layer_47;
+            
+                var layer_48 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T52',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T52"] = layer_48;
+            
+                var layer_49 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T53',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T53"] = layer_49;
+            
+                var layer_50 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T54',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T54"] = layer_50;
+            
+                var layer_51 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T55',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T55"] = layer_51;
+            
+                var layer_52 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T56',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T56"] = layer_52;
+            
+                var layer_53 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T57',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T57"] = layer_53;
+            
+                var layer_54 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T58',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T58"] = layer_54;
+            
+                var layer_55 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T59',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T59"] = layer_55;
+            
+                var layer_56 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T6',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T6"] = layer_56;
+            
+                var layer_57 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T60',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T60"] = layer_57;
+            
+                var layer_58 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T61',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T61"] = layer_58;
+            
+                var layer_59 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T62',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T62"] = layer_59;
+            
+                var layer_60 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T63',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T63"] = layer_60;
+            
+                var layer_61 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T7',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T7"] = layer_61;
+            
+                var layer_62 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T8',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T8"] = layer_62;
+            
+                var layer_63 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T9',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_01_21_02_34_RGB_20260303_161746_2026_01_21_02_34_T9"] = layer_63;
+            
+                var layer_64 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_02_25_02_34_RGB_20260303_100823_2026_02_25_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_02_25_02_34_RGB_20260303_100823_2026_02_25_02_34"] = layer_64;
+            
+                var layer_65 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_Mono_S2_2026_02_25_02_34_RGB_20260303_100823_2026_02_25_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_Mono_S2_2026_02_25_02_34_RGB_20260303_100823_2026_02_25_02_34_T1"] = layer_65;
+            
+                var layer_66 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_01_01_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_01_01_02_34"] = layer_66;
+            
+                var layer_67 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_01_01_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_01_01_02_34_T1"] = layer_67;
+            
+                var layer_68 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_01_31_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_01_31_02_34"] = layer_68;
+            
+                var layer_69 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_01_31_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_01_31_02_34_T1"] = layer_69;
+            
+                var layer_70 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_03_02_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_03_02_02_34"] = layer_70;
+            
+                var layer_71 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_03_02_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_03_02_02_34_T1"] = layer_71;
+            
+                var layer_72 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_04_01_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_04_01_02_34"] = layer_72;
+            
+                var layer_73 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_04_01_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_04_01_02_34_T1"] = layer_73;
+            
+                var layer_74 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_05_01_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_05_01_02_34"] = layer_74;
+            
+                var layer_75 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_05_01_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_05_01_02_34_T1"] = layer_75;
+            
+                var layer_76 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_05_31_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_05_31_02_34"] = layer_76;
+            
+                var layer_77 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_05_31_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_05_31_02_34_T1"] = layer_77;
+            
+                var layer_78 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_06_30_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_06_30_02_34"] = layer_78;
+            
+                var layer_79 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_06_30_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_06_30_02_34_T1"] = layer_79;
+            
+                var layer_80 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_07_30_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_07_30_02_34"] = layer_80;
+            
+                var layer_81 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_07_30_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_07_30_02_34_T1"] = layer_81;
+            
+                var layer_82 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_08_29_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_08_29_02_34"] = layer_82;
+            
+                var layer_83 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_08_29_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_08_29_02_34_T1"] = layer_83;
+            
+                var layer_84 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_09_28_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_09_28_02_34"] = layer_84;
+            
+                var layer_85 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_09_28_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_09_28_02_34_T1"] = layer_85;
+            
+                var layer_86 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_10_28_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_10_28_02_34"] = layer_86;
+            
+                var layer_87 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_10_28_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_10_28_02_34_T1"] = layer_87;
+            
+                var layer_88 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_11_27_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_11_27_02_34"] = layer_88;
+            
+                var layer_89 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_11_27_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_11_27_02_34_T1"] = layer_89;
+            
+                var layer_90 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_12_27_02_34',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_12_27_02_34"] = layer_90;
+            
+                var layer_91 = L.tileLayer.wms('http://localhost:8080/geoserver/ai4caf/wms', {
+                    layers: 'ai4caf:Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_12_27_02_34_T1',
+                    format: 'image/png',
+                    transparent: true,
+                    version: '1.1.1',
+                    crs: L.CRS.EPSG4326,
+                    uppercase: true 
+                });
+                overlayMaps["Area_TS_S2_2025_01_01_02_34_RGB_20260303_101016_2025_12_27_02_34_T1"] = layer_91;
+            
+                // Add the layer control menu to the top right
+                L.control.layers(baseMaps, overlayMaps, {collapsed: false}).addTo(map);
+            </script>
+        </body>
+        </html>
+        
