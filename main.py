@@ -2192,72 +2192,87 @@ class GEE_Local_Downloader_App:
             self.root.after(30, self._keep_image_pinned)
 
     def _show_tif_preview(self, path):
-        """Forced High-Contrast Rendering with Canvas Injection."""
+        """High-Speed Rendering: Uses sampling and background threading to prevent UI lag."""
         if not os.path.exists(path): return
         
-        # UI Lock to prevent crash during heavy math
-        self.show_loading_curtain("Injecting Satellite Signal...")
+        # 1. Calculate File Size
+        file_size_mb = os.path.getsize(path) / (1024 * 1024)
         
-        try:
-            from PIL import Image
-            import numpy as np
+        # 2. Show size in the Loading Curtain and the Console
+        self.show_loading_curtain(f"Processing {file_size_mb:.1f}MB Satellite Image...")
+        self.log(f"Map View: Injecting {os.path.basename(path)} ({file_size_mb:.1f} MB)")
+        
+        def processing_task():
+            try:
+                with rasterio.open(path) as src:
+                    # 1. Coordinate Transform
+                    bounds = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
+                    min_lon, min_lat, max_lon, max_lat = bounds
+                    
+                    # 2. Optimized Reading: Read a smaller overview for the preview
+                    # 512x512 is plenty for a map overlay and 4x faster than 1024x1024
+                    data = src.read(out_shape=(src.count, 512, 512), resampling=rasterio.enums.Resampling.bilinear)
+                    
+                    # 3. FAST STRETCH: Use a 10% sample to find percentiles (Massive speed gain)
+                    def fast_stretch(b):
+                        valid = b[b > 0]
+                        if valid.size == 0: return (b * 0).astype(np.uint8)
+                        
+                        # Only use every 10th pixel to calculate the histogram/percentile
+                        sample = valid[::10] 
+                        low, high = np.percentile(sample, (2, 98))
+                        return np.clip((b - low) / (max(high - low, 1)) * 255, 0, 255).astype(np.uint8)
+
+                    # Create Alpha mask from the first band
+                    mask = (data[0] == 0).astype(np.uint8) * 255
+                    alpha = 255 - mask
+
+                    if src.count >= 3:
+                        r = fast_stretch(data[0])
+                        g = fast_stretch(data[1])
+                        b_band = fast_stretch(data[2])
+                        img_array = np.dstack((r, g, b_band, alpha))
+                    else:
+                        gray = fast_stretch(data[0])
+                        img_array = np.dstack((gray, gray, gray, alpha))
+
+                    base_pil_image = Image.fromarray(img_array, 'RGBA')
+
+                # 4. Schedule UI update on the main thread
+                self.root.after(0, lambda: self._finalize_preview_ui(path, base_pil_image, max_lat, min_lon, min_lat, max_lon))
+
+            except Exception as e:
+                self.root.after(0, lambda: self.log(f"Render Error: {e}"))
+            finally:
+                self.root.after(0, self.hide_loading_curtain)
+
+        threading.Thread(target=processing_task, daemon=True).start()
+
+    def _finalize_preview_ui(self, path, base_pil_image, max_lat, min_lon, min_lat, max_lon):
+        """Updates the map canvas once the background processing is done."""
+        with self.raster_lock:
+            # Fit Map
+            if not getattr(self, 'is_batch_loading', False):
+                self.map_widget.fit_bounding_box((max_lat, min_lon), (min_lat, max_lon))
+
+            # Create the Red Anchor Box
+            box_coords = [(max_lat, min_lon), (max_lat, max_lon), (min_lat, max_lon), (min_lat, min_lon)]
+            box_obj = self.map_widget.set_polygon(box_coords, outline_color="red", border_width=2, fill_color=None)
             
-            with rasterio.open(path) as src:
-                # 1. Coordinate Transform
-                bounds = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
-                min_lon, min_lat, max_lon, max_lat = bounds
-                
-                # 2. Fit Map (Only if not batch loading)
-                if not getattr(self, 'is_batch_loading', False):
-                    self.map_widget.fit_bounding_box((max_lat, min_lon), (min_lat, max_lon))
-                
-                self.root.update()
+            # Create the Canvas Item
+            img_item = self.map_widget.canvas.create_image(0, 0, anchor="nw", tags="persistent_sat")
 
-                # 3. High-Contrast Math (Prevents 'Black Box' syndrome)
-                data = src.read(out_shape=(src.count, 1024, 1024))
-                
-                def stretch(b):
-                    valid = b[b > 0] 
-                    if valid.size == 0: return (b * 0).astype(np.uint8)
-                    low, high = np.percentile(valid, (2, 98))
-                    return np.clip((b - low) / (max(high - low, 1)) * 255, 0, 255).astype(np.uint8)
+            self.active_rasters[path] = {
+                "img_item": img_item,
+                "box_obj": box_obj,
+                "master_img": base_pil_image,
+                "last_size": (0, 0),
+                "photo_img": None
+            }
 
-                # Transparency Mask
-                mask = (data[0] == 0).astype(np.uint8) * 255
-                alpha = 255 - mask
-
-                if src.count >= 3:
-                    img_array = np.dstack((stretch(data[0]), stretch(data[1]), stretch(data[2]), alpha))
-                else:
-                    gray = stretch(data[0])
-                    img_array = np.dstack((gray, gray, gray, alpha))
-
-                base_pil_image = Image.fromarray(img_array, 'RGBA')
-
-            with self.raster_lock:
-                # Use a RED polygon as the physical anchor for the image
-                box_coords = [(max_lat, min_lon), (max_lat, max_lon), (min_lat, max_lon), (min_lat, min_lon)]
-                box_obj = self.map_widget.set_polygon(box_coords, outline_color="red", border_width=2, fill_color=None)
-                
-                # Create the Canvas Item with a PROTECTED TAG
-                img_item = self.map_widget.canvas.create_image(0, 0, anchor="nw", tags="persistent_sat")
-
-                self.active_rasters[path] = {
-                    "img_item": img_item,
-                    "box_obj": box_obj,
-                    "master_img": base_pil_image,
-                    "last_size": (0, 0),
-                    "photo_img": None
-                }
-
-            if not self.tracker_running:
-                self.tracker_running = True
-                self._keep_image_pinned()
-                
-        except Exception as e:
-            self.log(f"Render Critical Error: {e}")
-        finally:
-            self.hide_loading_curtain()
+        if not self.tracker_running:
+            self.tracker_running = True
+            self._keep_image_pinned()
 
     def close_preview(self):
         """Unselects the current record and restores the Map view."""
