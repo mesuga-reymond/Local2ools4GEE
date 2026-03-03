@@ -19,6 +19,33 @@ import time
 import psycopg2
 from psycopg2 import extras
 
+import sqlite3
+from cryptography.fernet import Fernet
+
+class CredentialVault:
+    def __init__(self, db_path="vault.db"):
+        self.db_path = db_path
+        # Static local key for the SQLite lockbox.
+        self.key = b'vS-R5W_QYwzH8KxY8xNq_m8t_c4R-2Q1_mE7_e9xXw8='
+        self.cipher = Fernet(self.key)
+        self._bootstrap()
+
+    def _bootstrap(self):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS secrets (key TEXT PRIMARY KEY, value BLOB)")
+
+    def store(self, key, value):
+        if not value: return
+        encrypted_value = self.cipher.encrypt(value.encode())
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("INSERT OR REPLACE INTO secrets VALUES (?, ?)", (key, encrypted_value))
+
+    def retrieve(self, key):
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute("SELECT value FROM secrets WHERE key = ?", (key,)).fetchone()
+            if row: return self.cipher.decrypt(row[0]).decode()
+        return ""
+
 class GeodatabaseManager:
     def __init__(self, host="localhost", dbname="ai4caf_db", user="postgres", password=""):
         self.params = {"host": host, "dbname": dbname, "user": user, "password": password}
@@ -39,7 +66,7 @@ class GeodatabaseManager:
             "CREATE EXTENSION IF NOT EXISTS postgis;",
             """CREATE TABLE IF NOT EXISTS satellite_inventory (
                 id SERIAL PRIMARY KEY,
-                acquisition_date TIMESTAMP,
+                acquisition_date DATE,
                 file_name TEXT,
                 dataset TEXT,
                 crs TEXT,
@@ -47,27 +74,38 @@ class GeodatabaseManager:
                 location_geom GEOMETRY(Polygon, 4326),
                 uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );""",
-            "CREATE INDEX IF NOT EXISTS idx_geom ON satellite_inventory USING GIST (location_geom);"
+            "CREATE INDEX IF NOT EXISTS idx_geom ON satellite_inventory USING GIST (location_geom);",
+            "CREATE INDEX IF NOT EXISTS idx_date ON satellite_inventory (acquisition_date);" # Added the missing comma and index
         ]
         try:
-            with psycopg2.connect(**self.params) as conn:
+            # We use a short timeout so the UI doesn't hang if the password is wrong
+            params = self.params.copy()
+            params['connect_timeout'] = 3 
+            with psycopg2.connect(**params) as conn:
                 with conn.cursor() as cur:
-                    for cmd in commands: cur.execute(cmd)
+                    for cmd in commands: 
+                        cur.execute(cmd)
                 conn.commit()
             return True
-        except: return False
+        except Exception as e: 
+            print(f"Setup Error: {e}")
+            return False
 
     def push_metadata(self, meta, log_func=None):
         try:
-            # 1. Get the full local path from the app
+            # 1. Path Handling (Ensures GeoServer can find the file relative to the 'Data' folder)
             full_path = meta["Path"]
-            
-            # 2. Get the current Project Folder (the part we want to keep)
-            # Example: 'C:/Data/Project_Alpha/image.tif' -> 'Project_Alpha/image.tif'
             data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Data")
             relative_path = os.path.relpath(full_path, data_dir).replace("\\", "/")
 
-            # 3. Coordinate Parsing (Existing)
+            # 2. Date Formatting (Ensures strict YYYY-MM-DD for the DATE column)
+            try:
+                # Try to parse and re-format just in case GEE sends a weird string
+                clean_date = datetime.strptime(meta["Date"], "%Y-%m-%d").date()
+            except:
+                clean_date = meta["Date"] # Fallback to raw string if already formatted
+
+            # 3. Coordinate Parsing
             nums = re.findall(r"[-+]?\d*\.\d+|\d+", meta["Bounds"])
             y, x = float(nums[0]), float(nums[1])
             offset = 0.05 
@@ -76,15 +114,19 @@ class GeodatabaseManager:
             query = """
                 INSERT INTO satellite_inventory (acquisition_date, file_name, dataset, crs, file_path, location_geom)
                 VALUES (%s, %s, %s, %s, %s, ST_GeomFromEWKT(%s))
-                ON CONFLICT (file_path) DO UPDATE SET acquisition_date = EXCLUDED.acquisition_date;
+                ON CONFLICT (file_path) DO UPDATE SET 
+                    acquisition_date = EXCLUDED.acquisition_date,
+                    location_geom = EXCLUDED.location_geom;
             """
+            
             with psycopg2.connect(**self.params) as conn:
                 with conn.cursor() as cur:
-                    cur.execute(query, (meta["Date"], meta["File Name"], meta["Dataset"], meta["CRS"], relative_path, wkt))
+                    cur.execute(query, (clean_date, meta["File Name"], meta["Dataset"], meta["CRS"], relative_path, wkt))
                 conn.commit()
-            if log_func: log_func(f"Database: Saved relative path for {meta['Date']}")
+                
+            if log_func: log_func(f"Database: Saved {relative_path}")
         except Exception as e:
-            if log_func: log_func(f"DB Error: {str(e)[:40]}")
+            if log_func: log_func(f"DB Error: {str(e)[:50]}")
 
 # Persistent Storage
 HISTORY_FILE = "project_history.txt"
@@ -124,8 +166,8 @@ class GEE_Local_Downloader_App:
         self.is_closing = False
         self.is_batch_loading = False  # The master switch for zoom behavior
         self.db_manager = GeodatabaseManager()
-        self.db_manager = GeodatabaseManager(password="YOUR_DB_PASSWORD")
-        threading.Thread(target=self.db_manager.setup_tables, daemon=True).start()
+        # self.db_manager = GeodatabaseManager(password="YOUR_DB_PASSWORD")
+        # threading.Thread(target=self.db_manager.setup_tables, daemon=True).start()
         
         # --- Band Variables ---
         self.s2_bands = {
@@ -914,11 +956,77 @@ class GEE_Local_Downloader_App:
             messagebox.showerror("DB Error", msg)
 
     def ui_setup_db(self):
+        # 1. First, pull the latest text from your UI input fields
+        self.db_manager.update_params(
+            self.db_host.get(), 
+            self.db_name.get(), 
+            self.db_user.get(), 
+            self.db_pass.get()
+        )
+        
+        # 2. Now run the setup
         if self.db_manager.setup_tables():
-            messagebox.showinfo("Success", "PostGIS Extension enabled and 'satellite_inventory' table created.")
-            self.log("Database: Tables Initialized.")
+            self.lbl_db_status.config(text="✅ Database Initialized", foreground="#2a9d8f")
+            messagebox.showinfo("Success", "PostGIS table 'satellite_inventory' is ready.")
+            self.log("Database: Tables Initialized with UI credentials.")
         else:
-            messagebox.showerror("Error", "Initialization failed. Check if PostGIS is installed on your server.")
+            messagebox.showerror("Error", "Initialization failed. Check your Password and User in the Database tab.")
+
+    def sync_to_geoserver(self):
+        """Automates Workspace, Store, and Time Dimension setup via REST API."""
+        import requests
+        from requests.auth import HTTPBasicAuth
+
+        # Config - Update these if your GeoServer login is different
+        gs_url = "http://localhost:8080/geoserver/rest"
+        auth = HTTPBasicAuth('admin', 'geoserver')
+        ws = "ai4caf"
+        store = "satellite_mosaic"
+        
+        # Get the absolute path to your Data folder for the API
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        data_path = f"file:///{os.path.join(script_dir, 'Data')}".replace("\\", "/")
+
+        self.log("🚀 Starting GeoServer Automation...")
+
+        try:
+            # 1. Ensure Workspace exists
+            requests.post(f"{gs_url}/workspaces", json={"workspace": {"name": ws}}, auth=auth)
+
+            # 2. Create or Update the ImageMosaic Store
+            store_xml = f"<imageMosaic><name>{store}</name><enabled>true</enabled><connectionParameters><entry key='url'>{data_path}</entry></connectionParameters></imageMosaic>"
+            resp = requests.post(f"{gs_url}/workspaces/{ws}/coveragestores", 
+                                 data=store_xml, headers={'Content-type': 'text/xml'}, auth=auth)
+            
+            # 3. If store already exists, "Poke" it to find new files (Harvest)
+            if resp.status_code != 201:
+                self.log("Store exists. Harvesting new images...")
+                requests.post(f"{gs_url}/workspaces/{ws}/coveragestores/{store}/external.imagemosaic", 
+                              data=data_path, auth=auth)
+
+            # 4. Force Enable Time Dimension
+            dim_xml = """
+            <coverage><metadata><entry key="time"><dimensionInfo>
+                <enabled>true</enabled><presentation>LIST</presentation>
+                <units>ISO8601</units><defaultValue><strategy>MAXIMUM</strategy></defaultValue>
+            </dimensionInfo></entry></metadata></coverage>
+            """
+            requests.put(f"{gs_url}/workspaces/{ws}/coveragestores/{store}/coverages/{store}", 
+                         data=dim_xml, headers={'Content-type': 'text/xml'}, auth=auth)
+
+            self.log("✅ GeoServer Sync Complete. Time Dimension Active.")
+            messagebox.showinfo("GeoServer Sync", "Web Map is now updated with latest imagery!")
+
+        except Exception as e:
+            self.log(f"GeoServer Error: {str(e)[:50]}")
+            messagebox.showerror("Sync Error", f"Failed to automate GeoServer: {e}")
+
+    def open_web_map(self):
+        """Opens the GeoServer Layer Preview in the default browser."""
+        import webbrowser
+        # This URL targets the OpenLayers preview specifically
+        url = "http://localhost:8080/geoserver/ai4caf/wms?service=WMS&version=1.1.0&request=GetMap&layers=ai4caf:satellite_mosaic&bbox=-180,-90,180,90&width=768&height=384&srs=EPSG:4326&format=application/openlayers"
+        webbrowser.open(url)
 
     def take_map_snapshot(self):
         """Captures the map canvas with pixel-perfect accuracy using modern DPI scaling detection."""
