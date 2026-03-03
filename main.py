@@ -166,6 +166,12 @@ class GEE_Local_Downloader_App:
         self.is_closing = False
         self.is_batch_loading = False  # The master switch for zoom behavior
         self.db_manager = GeodatabaseManager()
+        self.vault = CredentialVault()
+        
+        # New GeoServer StringVars
+        self.gs_user_var = tk.StringVar(value="admin")
+        self.gs_pass_var = tk.StringVar(value="")
+        self.save_creds_var = tk.BooleanVar(value=False)
         # self.db_manager = GeodatabaseManager(password="YOUR_DB_PASSWORD")
         # threading.Thread(target=self.db_manager.setup_tables, daemon=True).start()
         
@@ -774,56 +780,59 @@ class GEE_Local_Downloader_App:
         self.layers_tree.bind("<Button-3>", self.show_layers_context_menu)
 
         # ==========================================
-        # --- TAB 5: GEODATABASE ---
+        # --- TAB 5: GEODATABASE & DEPLOYMENT ---
         # ==========================================
         self.tab_db = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(self.tab_db, text=" 🗄️ Database ")
+        self.notebook.add(self.tab_db, text=" 🗄️ Database & Deploy ")
 
-        db_f = ttk.LabelFrame(self.tab_db, text=" PostGIS Connection Settings ", padding=15)
-        db_f.pack(fill="x", pady=5)
+        # --- 1. Secure Authentication Settings ---
+        auth_f = ttk.LabelFrame(self.tab_db, text=" 🔐 PostGIS & GeoServer Credentials ", padding=15)
+        auth_f.pack(fill="x", pady=5)
 
-        # DB Variables
         self.db_host = tk.StringVar(value="localhost")
         self.db_name = tk.StringVar(value="ai4caf_db")
         self.db_user = tk.StringVar(value="postgres")
         self.db_pass = tk.StringVar(value="")
 
-        # Grid Layout for Credentials
-        fields = [("Host:", self.db_host), ("Database:", self.db_name), ("User:", self.db_user)]
-        for i, (label, var) in enumerate(fields):
-            ttk.Label(db_f, text=label).grid(row=i, column=0, sticky="w", pady=5)
-            ttk.Entry(db_f, textvariable=var).grid(row=i, column=1, sticky="ew", padx=(10, 0))
-        
-        ttk.Label(db_f, text="Password:").grid(row=3, column=0, sticky="w", pady=5)
-        self.ent_db_pass = ttk.Entry(db_f, textvariable=self.db_pass, show="*")
-        self.ent_db_pass.grid(row=3, column=1, sticky="ew", padx=(10, 0))
-        db_f.columnconfigure(1, weight=1)
+        # PostGIS Left Column
+        ttk.Label(auth_f, text="PostGIS Host:").grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Entry(auth_f, textvariable=self.db_host, width=15).grid(row=0, column=1, sticky="w", padx=5)
+        ttk.Label(auth_f, text="PostGIS User:").grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Entry(auth_f, textvariable=self.db_user, width=15).grid(row=1, column=1, sticky="w", padx=5)
+        ttk.Label(auth_f, text="PostGIS Pass:").grid(row=2, column=0, sticky="w", pady=2)
+        ttk.Entry(auth_f, textvariable=self.db_pass, show="*", width=15).grid(row=2, column=1, sticky="w", padx=5)
+
+        # GeoServer Right Column
+        ttk.Label(auth_f, text="GeoServer User:").grid(row=0, column=2, sticky="w", padx=(20,0), pady=2)
+        ttk.Entry(auth_f, textvariable=self.gs_user_var, width=15).grid(row=0, column=3, sticky="w", padx=5)
+        ttk.Label(auth_f, text="GeoServer Pass:").grid(row=1, column=2, sticky="w", padx=(20,0), pady=2)
+        ttk.Entry(auth_f, textvariable=self.gs_pass_var, show="*", width=15).grid(row=1, column=3, sticky="w", padx=5)
+
+        ttk.Checkbutton(auth_f, text="Store passwords securely in vault.db", variable=self.save_creds_var).grid(row=3, column=0, columnspan=4, pady=10)
+
+        # Load saved credentials instantly
+        self.load_stored_credentials()
 
         self.lbl_db_status = ttk.Label(self.tab_db, text="Status: Disconnected", foreground="gray")
-        self.lbl_db_status.pack(pady=10)
+        self.lbl_db_status.pack(pady=2)
 
         btn_f = ttk.Frame(self.tab_db)
         btn_f.pack(fill="x", pady=5)
+        ttk.Button(btn_f, text="Initialize DB", command=self.ui_setup_db).pack(side="left", expand=True, fill="x", padx=2)
+        ttk.Button(btn_f, text="🧹 Clean Links", command=self.prune_ghost_records).pack(side="left", expand=True, fill="x", padx=2)
 
-        ttk.Button(btn_f, text="Test Connection", 
-                   command=self.ui_test_db).pack(side="left", expand=True, fill="x", padx=(0, 2))
-        ttk.Button(btn_f, text="Initialize DB", 
-                   command=self.ui_setup_db).pack(side="left", expand=True, fill="x", padx=2)
-        ttk.Button(btn_f, text="🚀 Sync History", 
-                   command=self.sync_all_to_db).pack(side="left", expand=True, fill="x", padx=2)
-        ttk.Button(btn_f, text="🧹 Clean Links", 
-                   command=self.prune_ghost_records).pack(side="left", expand=True, fill="x", padx=(2, 0))
+        # --- 2. Deployment & Automation ---
+        deploy_f = ttk.LabelFrame(self.tab_db, text=" 🚀 GeoServer API Deployment ", padding=10)
+        deploy_f.pack(fill="x", pady=10)
 
-        # --- PATH MIGRATION TOOL ---
-        mig_f = ttk.LabelFrame(self.tab_db, text=" 🚀 Deployment & Migration ", padding=10)
-        mig_f.pack(fill="x", pady=10)
+        ttk.Button(deploy_f, text="1. Sync AI4CAF to GeoServer", command=self.run_full_deployment).pack(fill="x", pady=2)
         
-        ttk.Label(mig_f, text="Production Root Path (NAS/Server):", font=("Arial", 8, "bold")).pack(anchor="w")
-        self.nas_root_var = tk.StringVar(value="//SERVER_IP/Shared_Folder/") # More generic placeholder
-        ttk.Entry(mig_f, textvariable=self.nas_root_var).pack(fill="x", pady=5)
-        
-        ttk.Button(mig_f, text="Finalize Deployment Paths", 
-                   command=self.ui_migrate_paths).pack(fill="x")
+        # NEW: Dropdown menu for individual layers
+        ttk.Label(deploy_f, text="Select Layer to View:").pack(anchor="w", pady=(5, 0))
+        self.layer_dropdown = ttk.Combobox(deploy_f, state="readonly")
+        self.layer_dropdown.pack(fill="x", pady=(0, 5))
+
+        ttk.Button(deploy_f, text="2. Open Live Web Map (Satellite Base)", command=self.open_web_map).pack(fill="x", pady=2)
 
         # ==========================================
         # --- RIGHT PANEL: THE MAP ---
@@ -972,60 +981,137 @@ class GEE_Local_Downloader_App:
         else:
             messagebox.showerror("Error", "Initialization failed. Check your Password and User in the Database tab.")
 
+    def load_stored_credentials(self):
+        """Loads decrypted passwords into the UI if they exist."""
+        try:
+            gs_user = self.vault.retrieve("GS_USER")
+            gs_pass = self.vault.retrieve("GS_PASS")
+            db_pass = self.vault.retrieve("DB_PASS")
+
+            if gs_user: self.gs_user_var.set(gs_user)
+            if gs_pass: self.gs_pass_var.set(gs_pass)
+            if db_pass: self.db_pass.set(db_pass)
+            
+            if gs_user or db_pass:
+                self.save_creds_var.set(True)
+                self.log("📂 Credentials loaded securely from vault.db")
+        except Exception as e:
+            self.log(f"Vault Load Error: {e}")
+
+    def run_full_deployment(self):
+        """Saves credentials (if checked) and triggers the API sync."""
+        if self.save_creds_var.get():
+            self.vault.store("GS_USER", self.gs_user_var.get())
+            self.vault.store("GS_PASS", self.gs_pass_var.get())
+            self.vault.store("DB_PASS", self.db_pass.get())
+            self.log("🔒 Credentials safely encrypted to vault.db")
+        
+        # Test Database first
+        self.ui_test_db()
+        
+        # Then sync GeoServer
+        threading.Thread(target=self.sync_to_geoserver, daemon=True).start()
+
     def sync_to_geoserver(self):
-        """Automates Workspace, Store, and Time Dimension setup via REST API."""
+        """Enterprise Mode: Uploads a copy to the GeoServer node, keeps local archive safe."""
         import requests
         from requests.auth import HTTPBasicAuth
+        import os
+        import re
 
-        # Config - Update these if your GeoServer login is different
-        gs_url = "http://localhost:8080/geoserver/rest"
-        auth = HTTPBasicAuth('admin', 'geoserver')
+        gs_url = "http://localhost:8080/geoserver/rest" # You may need to change localhost to the GeoServer's actual IP address!
+        auth = HTTPBasicAuth(self.gs_user_var.get(), self.gs_pass_var.get())
         ws = "ai4caf"
-        store = "satellite_mosaic"
-        
-        # Get the absolute path to your Data folder for the API
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        data_path = f"file:///{os.path.join(script_dir, 'Data')}".replace("\\", "/")
 
-        self.log("🚀 Starting GeoServer Automation...")
+        self.root.after(0, lambda: self.log("🚀 Prepping Enterprise GeoServer Sync..."))
 
         try:
-            # 1. Ensure Workspace exists
-            requests.post(f"{gs_url}/workspaces", json={"workspace": {"name": ws}}, auth=auth)
-
-            # 2. Create or Update the ImageMosaic Store
-            store_xml = f"<imageMosaic><name>{store}</name><enabled>true</enabled><connectionParameters><entry key='url'>{data_path}</entry></connectionParameters></imageMosaic>"
-            resp = requests.post(f"{gs_url}/workspaces/{ws}/coveragestores", 
-                                 data=store_xml, headers={'Content-type': 'text/xml'}, auth=auth)
+            paths_to_process = []
+            def get_all_file_paths(node=""):
+                for child in self.layers_tree.get_children(node):
+                    vals = self.layers_tree.item(child, "values")
+                    if vals and vals[0].lower().endswith('.tif'): 
+                        paths_to_process.append(vals[0])
+                    else: 
+                        get_all_file_paths(child)
             
-            # 3. If store already exists, "Poke" it to find new files (Harvest)
-            if resp.status_code != 201:
-                self.log("Store exists. Harvesting new images...")
-                requests.post(f"{gs_url}/workspaces/{ws}/coveragestores/{store}/external.imagemosaic", 
-                              data=data_path, auth=auth)
+            get_all_file_paths()
 
-            # 4. Force Enable Time Dimension
-            dim_xml = """
-            <coverage><metadata><entry key="time"><dimensionInfo>
-                <enabled>true</enabled><presentation>LIST</presentation>
-                <units>ISO8601</units><defaultValue><strategy>MAXIMUM</strategy></defaultValue>
-            </dimensionInfo></entry></metadata></coverage>
-            """
-            requests.put(f"{gs_url}/workspaces/{ws}/coveragestores/{store}/coverages/{store}", 
-                         data=dim_xml, headers={'Content-type': 'text/xml'}, auth=auth)
+            if not paths_to_process:
+                self.root.after(0, lambda: self.log("⚠️ No .tif files found to sync!"))
+                return
 
-            self.log("✅ GeoServer Sync Complete. Time Dimension Active.")
-            messagebox.showinfo("GeoServer Sync", "Web Map is now updated with latest imagery!")
+            self.root.after(0, lambda: self.log(f"Found {len(paths_to_process)} files. Pushing to GeoServer node..."))
+
+            ws_xml = f"<workspace><name>{ws}</name></workspace>"
+            requests.post(f"{gs_url}/workspaces", data=ws_xml, headers={'Content-type': 'text/xml'}, auth=auth)
+
+            published_layers = []
+            failed_count = 0
+
+            for tif_path in paths_to_process:
+                file_name = os.path.basename(tif_path)
+                base_name = os.path.splitext(file_name)[0]
+                
+                safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', base_name)
+                if not safe_name[0].isalpha(): safe_name = "layer_" + safe_name
+                
+                self.root.after(0, lambda name=safe_name: self.log(f"Uploading copy to GeoServer: {name}..."))
+
+                store_url = f"{gs_url}/workspaces/{ws}/coveragestores/{safe_name}"
+                upload_url = f"{store_url}/file.geotiff"
+                
+                requests.delete(f"{store_url}?recurse=true", auth=auth)
+                
+                # Uploads the file securely to GeoServer. The original stays untouched on this server!
+                with open(tif_path, 'rb') as f:
+                    resp = requests.put(upload_url, data=f, headers={'Content-type': 'image/tiff'}, auth=auth)
+                
+                if resp.status_code in [200, 201]:
+                    published_layers.append(safe_name)
+                else:
+                    failed_count += 1
+                    err_msg = resp.text[:100].replace('\n', ' ')
+                    self.root.after(0, lambda sn=safe_name, err=err_msg, code=resp.status_code: 
+                                    self.log(f"❌ Failed {sn} (HTTP {code}): {err}"))
+
+            if published_layers:
+                self.root.after(0, lambda: self.update_dropdown(published_layers))
+                self.root.after(0, lambda: self.log(f"✅ Enterprise Sync Complete! {len(published_layers)} layers published."))
+                self.root.after(0, lambda: messagebox.showinfo("Deployment", f"Successfully synced {len(published_layers)} layers to the GeoServer node!"))
+            else:
+                self.root.after(0, lambda: messagebox.showerror("Sync Failed", "GeoServer rejected all files."))
 
         except Exception as e:
-            self.log(f"GeoServer Error: {str(e)[:50]}")
-            messagebox.showerror("Sync Error", f"Failed to automate GeoServer: {e}")
+            self.root.after(0, lambda err=str(e): self.log(f"GeoServer Fatal Error: {err[:100]}"))
+
+    def update_dropdown(self, layers):
+        """Helper to safely update the dropdown in the main thread."""
+        self.layer_dropdown['values'] = layers
+        self.layer_dropdown.current(0) # Select the first one by default
 
     def open_web_map(self):
-        """Opens the GeoServer Layer Preview in the default browser."""
+        """Opens GeoServer layer preview for the currently selected layer."""
         import webbrowser
-        # This URL targets the OpenLayers preview specifically
-        url = "http://localhost:8080/geoserver/ai4caf/wms?service=WMS&version=1.1.0&request=GetMap&layers=ai4caf:satellite_mosaic&bbox=-180,-90,180,90&width=768&height=384&srs=EPSG:4326&format=application/openlayers"
+        
+        selected_layer = self.layer_dropdown.get()
+        if not selected_layer:
+            messagebox.showerror("Error", "Please select a layer from the dropdown first!")
+            return
+
+        m_roi = self.manual_roi_bounds
+        if m_roi:
+            bbox_str = f"{m_roi[0]-0.05},{m_roi[1]-0.05},{m_roi[2]+0.05},{m_roi[3]+0.05}"
+        else:
+            bbox_str = "116.9,4.5,126.6,21.3"
+
+        # Dynamically inject the selected layer name into the URL
+        url = (
+            f"http://localhost:8080/geoserver/ai4caf/wms?service=WMS&version=1.1.0"
+            f"&request=GetMap&layers=ai4caf:{selected_layer}"
+            f"&bbox={bbox_str}&width=1200&height=800&srs=EPSG:4326"
+            f"&format=application/openlayers"
+        )
         webbrowser.open(url)
 
     def take_map_snapshot(self):
