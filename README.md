@@ -1,47 +1,50 @@
-# GEE2DB: Earth Engine to PostGIS Spatial Pipeline
-
-**GEE2DB** is a professional-grade graphical interface designed to streamline the extraction of satellite imagery from **Google Earth Engine (GEE)** and its integration into local **PostGIS** databases and **GeoServer** environments.
-
-## 🛠 Features
-
-* **Secure Credential Management**: Uses an encrypted SQLite "Vault" powered by the Fernet cipher to store your PostGIS and GeoServer passwords locally.
-* **Flexible Area of Interest (AOI)**: 
-    * Define areas by browsing for `.SHP`, `.GeoJSON`, or `.TIFF` files.
-    * **Manual Annotate Mode**: Mark corners directly on the interactive map to define a custom bounding box.
-    * **Global Search**: Integrated location search and coordinate "jump" functionality.
-* **Multi-Sensor Support**: Native pipelines for Sentinel-2 (Cloud-masked), Landsat 8/9, Sentinel-1 (Radar), and SRTM Elevation data.
-* **Advanced Batch Processing**: 
-    * **Time-Series Mode**: Scout and download imagery across specific date intervals (e.g., every 30 days).
-    * **Automated Stitching**: Merges downloaded Earth Engine tiles into a single seamless `.TIF` file.
-* **Full Deployment Stack**: 
-    * **PostGIS Sync**: Automatically pushes acquisition metadata and geometries to a spatial database.
-    * **GeoServer API**: One-click sync to GeoServer with automated SLD styling and layer creation.
-    * **Web Dashboard**: Generates an interactive Leaflet-based HTML map to view your synced layers in any browser.
-
-## 🚀 Installation & Setup
-
-1.  **Environment**: Ensure you have Python 3.x installed with the following core dependencies:
-    * `tkinter`, `tkintermapview`, `tkcalendar`
-    * `earthengine-api`, `geopandas`, `rasterio`
-    * `psycopg2`, `cryptography`
-2.  **Earth Engine**: You must have a Google Earth Engine account and an active Google Cloud Project.
-3.  **Local Stack**: A running instance of PostgreSQL/PostGIS and GeoServer (optional, for deployment features).
-
-## 📖 Usage
-
-1.  **Connect**: Enter your GEE Project ID in the **Control** tab and click **Connect**.
-2.  **AOI**: Load a shapefile or use the **Manual Annotate Mode** on the map to select your study area.
-3.  **Configure**: Select your dataset, spectral bands (e.g., RGB, NIR, NDVI), and target date(s).
-4.  **Download**: Click **Start Download**. The **Tasks** tab will show real-time progress.
-5.  **Deploy**: Use the **Database & Deploy** tab to sync your data to PostGIS and visualize it via the generated Web Map.
-
-## 📂 Project Structure
-
-* `/Data`: Root folder for all downloaded projects and GeoTIFFs.
-* `/Snapshots`: High-fidelity map captures.
-* `vault.db`: Encrypted local database for your login credentials.
-* `download_records.csv`: Master metadata log for every successful download.
+# Local2ools4GEE: A Desktop Interface to Download, Visualize, and Manage GEE Spatial Data Locally
 
 ---
 
-*This tool was developed to bridge the gap between cloud-scale remote sensing and local GIS workflows.*
+## 🛠️ Overview
+**Local2ools4GEE** is a high-utility engineering toolkit designed to bridge the gap between Google Earth Engine's cloud compute power and local geospatial workflows. Unlike standard web-based GEE interfaces, this tool focuses on the **Local Pipeline**: extracting precise satellite data, inventorying it in a private PostGIS database, and providing a high-performance desktop environment for visualization and deployment.
+
+
+
+---
+
+## 🚀 Key Features
+
+### 📡 Data Acquisition (The ETL Engine)
+* **Multi-Sensor Support:** Native support for Sentinel-2 (SR), Landsat 8/9, Sentinel-1 (SAR), and SRTM Elevation data.
+* **Time-Series Batching:** Automated "Scouting" logic that finds the closest satellite passes across a 180-day window for scheduled intervals (e.g., monthly monitoring).
+* **Smart Stitching:** Automatically handles GEE's 1x1 degree tiling limits by downloading sub-tiles and stitching them into seamless, high-resolution GeoTIFFs.
+* **Strict Temporal Logic:** Option to force single-date downloads to prevent "patchwork" artifacts in large provincial maps.
+
+### 🗺️ High-Fidelity Visualization
+* **The "Pinner" Engine:** A custom threading watchdog that "glues" heavy raster previews (500MB+) onto an interactive map without UI lag.
+* **Vector Integration:** Native rendering for `.shp` and `.geojson` with dynamic label visibility based on zoom levels.
+* **Pixel Inspector:** Real-time metadata hover tool to inspect raw band values directly on the map.
+
+### 🗄️ Database & Deployment
+* **PostGIS Inventory:** Automatically pushes spatial metadata (acquisition date, file size, dataset, geometry) to a `satellite_inventory` table.
+* **Secure Vault:** Encrypted storage for PostGIS and GeoServer credentials using AES-256 (Fernet) encryption.
+* **GeoServer Sync:** Direct integration with GeoServer REST API to upload local rasters and apply specialized SLD styles.
+* **Web Dashboard:** One-click generation of a standalone Leaflet.js dashboard to share your local layers via a web browser.
+
+
+
+---
+
+## ⚙️ Installation
+
+### 1. Prerequisites
+* **Python 3.10+**
+* **Google Earth Engine Account:** A registered GCP project ID.
+* **PostgreSQL/PostGIS:** (Optional) For management and inventory features.
+* **GeoServer:** (Optional) For web deployment features.
+
+### 2. Environment Setup
+```bash
+# Clone the repository
+git clone [https://github.com/USERNAME/Local2ools4GEE.git](https://github.com/USERNAME/Local2ools4GEE.git)
+cd Local2ools4GEE
+
+# Install dependencies
+pip install -r requirements.txt
