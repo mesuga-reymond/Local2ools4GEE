@@ -1196,7 +1196,7 @@ class GEE_Local_Downloader_App:
                 self.root.after(0, lambda: self.log("🏁 Sync Complete! Dropdown updated."))
                 
             except Exception as e:
-                self.root.after(0, lambda: self.log(f"❌ Sync Error: {e}"))
+                self.root.after(0, lambda err=str(e): self.log(f"❌ Sync Error: {err}"))
 
         threading.Thread(target=process_and_upload, daemon=True).start()
 
@@ -1848,7 +1848,7 @@ class GEE_Local_Downloader_App:
                     self.search_listbox.insert(tk.END, "No results found.")
                 ))
         except Exception as e:
-            self.root.after(0, lambda: self.log(f"Search Error: {e}"))
+            self.root.after(0, lambda err=str(e): self.log(f"Search Error: {err}"))
 
     def _update_search_listbox(self, locations):
         self.search_listbox.delete(0, tk.END)
@@ -2189,7 +2189,7 @@ class GEE_Local_Downloader_App:
         
         # Fast 30ms heartbeat to keep the image 'glued' to the screen
         if not getattr(self, 'is_closing', False):
-            self.root.after(30, self._keep_image_pinned)
+            self.root.after(10, self._keep_image_pinned)
 
     def _show_tif_preview(self, path):
         """High-Speed Rendering: Uses sampling and background threading to prevent UI lag."""
@@ -2242,7 +2242,8 @@ class GEE_Local_Downloader_App:
                 self.root.after(0, lambda: self._finalize_preview_ui(path, base_pil_image, max_lat, min_lon, min_lat, max_lon))
 
             except Exception as e:
-                self.root.after(0, lambda: self.log(f"Render Error: {e}"))
+                # We 'capture' the error message as a string (err) immediately
+                self.root.after(0, lambda err=str(e): self.log(f"Render Error: {err}"))
             finally:
                 self.root.after(0, self.hide_loading_curtain)
 
@@ -3487,14 +3488,21 @@ class GEE_Local_Downloader_App:
                 
                 # BUILD GEE IMAGE 
                 target_dt = datetime.strptime(current_target_date[:10], "%Y-%m-%d")
-                d_start = (target_dt - timedelta(days=1)).strftime("%Y-%m-%d")
-                d_end = (target_dt + timedelta(days=2)).strftime("%Y-%m-%d")
+                # d_start = (target_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+                # d_end = (target_dt + timedelta(days=2)).strftime("%Y-%m-%d")
+                d_start = target_dt.strftime("%Y-%m-%d")
+                d_end = (target_dt + timedelta(days=1)).strftime("%Y-%m-%d")
 
                 # Dataset Selection Logic (Preserved)
                 if "Sentinel-2" in ds_name:
-                    col = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED").filterBounds(roi).filterDate(d_start, d_end)
-                    if col.size().getInfo() == 0: continue
-                    img = col.sort('CLOUDY_PIXEL_PERCENTAGE').mosaic()
+                    col = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED") \
+                            .filterBounds(roi) \
+                            .filterDate(d_start, d_end) \
+                            .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
+                    if col.size().getInfo() == 0: 
+                        self.log(f"⚠️ No data found for strictly {current_target_date}. Skipping.")
+                        continue
+                    img = col.mosaic().clip(roi)
                     mapping = {"Red (B4)":'B4', "Green (B3)":'B3', "Blue (B2)":'B2', "NIR (B8)":'B8', "SWIR 1 (B11)":'B11'}
                     selected = [mapping[n] for n, v in self.s2_bands.items() if v.get()]
                     if self.index_vars["NDVI"].get():
