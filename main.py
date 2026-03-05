@@ -1380,51 +1380,62 @@ class GEE_Local_Downloader_App:
             self.log("🛑 Cancellation requested. Finishing current tile before stopping...")
 
     def _open_calendar_picker(self, target_variable):
-        """Creates a bright, modern popup calendar."""
+        """Creates a modern popup calendar and FORCES the date into the field."""
         cal_win = tk.Toplevel(self.root)
         cal_win.title("Select Date")
-        cal_win.geometry("280x250") # Slightly larger for better spacing
-        cal_win.grab_set() 
+        cal_win.geometry("300x320") 
+        cal_win.grab_set() # Keep focus on the calendar
+        cal_win.attributes("-topmost", True) # Keep it on top of other windows
 
-        # Enforce theme so the button looks native
-        style = ttk.Style(cal_win)
-        style.theme_use('clam')
-
+        # 1. INITIAL DATE LOGIC
+        # Try to read the current date from the field so the calendar opens on it
         current_val = target_variable.get()
         try:
-            from datetime import datetime
-            dt = datetime.strptime(current_val, "%Y-%m-%d")
-            year, month, day = dt.year, dt.month, dt.day
+            dt = datetime.strptime(current_val[:10], "%Y-%m-%d")
+            y, m, d = dt.year, dt.month, dt.day
         except:
-            year, month, day = 2025, 1, 1
+            # Default to today if the field is empty or has a placeholder
+            now = datetime.now()
+            y, m, d = now.year, now.month, now.day
 
-        # --- THE BRIGHT THEME SETTINGS ---
+        # 2. THE CALENDAR WIDGET
         cal = Calendar(cal_win, selectmode='day', 
-                       year=year, month=month, day=day,
+                       year=y, month=m, day=d,
                        date_pattern='yyyy-mm-dd',
-                       font="Arial 9", # Crisper font
-                       background="#ffffff",          # Outer border
-                       foreground="black",            # Regular text
-                       bordercolor="#dee2e6",         # Soft border
-                       headersbackground="#e9ecef",   # Very light grey for Day names (Mon, Tue)
-                       headersforeground="#495057",   # Dark grey for Day text
-                       selectbackground="#00a8e8",    # Bright blue for selected day
-                       selectforeground="#ffffff",    # White text for selected day
-                       normalbackground="#ffffff",    # White background for normal days
-                       normalforeground="black",      # Black text for normal days
-                       weekendbackground="#f8f9fa",   # Slight off-white for weekends
-                       weekendforeground="#e76f51")   # Subtle orange for weekend text
-        
-        cal.pack(fill="both", expand=True, padx=10, pady=(10, 5))
+                       font="Arial 10",
+                       background="#00a8e8", foreground="white", 
+                       selectbackground="#ff5722", selectforeground="white")
+        cal.pack(fill="both", expand=True, padx=10, pady=10)
 
+        # 3. THE SET DATE ENGINE
         def set_date():
-            target_variable.set(cal.get_date())
+            # GET: Pull the date from the calendar
+            selected_date = cal.get_date()
+            
+            # PUSH: Force the date into the StringVar
+            target_variable.set(selected_date)
+            
+            # TRIGGER: Manually notify the entry field it has new data 
+            # (This fixes the 'Grey text' issue)
+            if hasattr(self, 'date_entry'):
+                self.date_entry.config(foreground="black")
+                
+            self.log(f"Calendar: Set date to {selected_date}")
             cal_win.destroy()
 
-        # Flat, modern confirm button
-        btn_confirm = tk.Button(cal_win, text="Confirm Selection", bg="#00a8e8", fg="white", 
-                                font=("Segoe UI", 9, "bold"), relief="flat", cursor="hand2", command=set_date)
-        btn_confirm.pack(pady=(0, 10), ipadx=10, ipady=3)
+        # Add a double-click shortcut (Fast UX)
+        cal.bind("<<CalendarSelected>>", lambda e: None) # Keeps it clean
+        
+        # 4. CONFIRM BUTTON
+        btn_confirm = tk.Button(cal_win, text="CONFIRM SELECTION", 
+                                bg="#00a8e8", fg="white", 
+                                font=("Segoe UI", 10, "bold"), 
+                                relief="flat", cursor="hand2", 
+                                command=set_date)
+        btn_confirm.pack(fill="x", padx=10, pady=(0, 10), ipady=5)
+
+        # Optional: Double-click on the date to auto-confirm
+        cal.bind("<Double-1>", lambda e: set_date())
 
     def _show_batch_review_window(self, schedule_data):
         """Schedule Editor: Features Proximity Prioritization and 'Suggested' YES/NO column."""
@@ -1665,18 +1676,25 @@ class GEE_Local_Downloader_App:
             self.log("Single-Temporal Mode: Select a specific pass.")
 
     def _setup_single_date_ui(self):
-        """UI for Mono-temporal download with compact Calendar Picker."""
+        """UI for Single Date selection."""
         ttk.Label(self.date_container, text="Target Date:").pack(side="left")
         
-        self.date_entry = ttk.Entry(self.date_container, textvariable=self.target_date_var, width=12, foreground="grey")
+        # Use a slightly wider entry to prevent text clipping
+        self.date_entry = ttk.Entry(self.date_container, textvariable=self.target_date_var, width=14)
         self.date_entry.pack(side="left", padx=(5, 2))
         
-        # THE FIX: Swapped to compact tk.Button
-        tk.Button(self.date_container, text="📅", cursor="hand2", relief="groove", bd=1, bg="#ffffff",
+        # Set initial state
+        if self.target_date_var.get() == self.yesterday_val:
+            self.date_entry.config(foreground="grey")
+
+        tk.Button(self.date_container, text="📅", cursor="hand2", relief="flat", bg="#f0f0f0",
                   command=lambda: self._open_calendar_picker(self.target_date_var)).pack(side="left", padx=(0, 5))
         
         self.date_entry.bind("<FocusIn>", self.clear_placeholder)
         self.date_entry.bind("<FocusOut>", self.restore_placeholder)
+        
+        # Force black text whenever the variable changes (e.g., from the Calendar)
+        self.target_date_var.trace_add("write", lambda *args: self.date_entry.config(foreground="black"))
         
         ttk.Button(self.date_container, text="🔍 Check Pass", command=self.find_available_dates).pack(side="left", fill="x", expand=True)
 
@@ -1717,13 +1735,41 @@ class GEE_Local_Downloader_App:
         
         interval_f = ttk.Frame(grid_f)
         interval_f.grid(row=2, column=1, sticky="w", pady=(2, 0))
-        ttk.Entry(interval_f, textvariable=self.ts_step_var, width=5).pack(side="left")
-        ttk.Label(interval_f, text=" days").pack(side="left", padx=(3, 0))
+    def _setup_timeseries_ui(self):
+        """UI for Multi-temporal range selection."""
+        self.ts_start_var = tk.StringVar(value=(datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
+        self.ts_end_var = tk.StringVar(value=self.yesterday_val)
+        self.ts_step_var = tk.StringVar(value="30")
+
+        grid_f = ttk.Frame(self.date_container, padding=2)
+        grid_f.pack(fill="x")
         
-        # --- THE HELP ICON ---
-        info = tk.Label(grid_f, text="ⓘ", fg="#0077b6", cursor="hand2")
-        info.grid(row=2, column=3, sticky="e", pady=(2, 0))
-        self.create_tooltip(info, "Set to '5' for every Sentinel-2 pass,\n or '30' for a monthly time-series.")
+        grid_f.columnconfigure(1, weight=1)
+
+        # Row 1: Start
+        ttk.Label(grid_f, text="Start:").grid(row=0, column=0, sticky="w", pady=2)
+        ent_start = ttk.Entry(grid_f, textvariable=self.ts_start_var)
+        ent_start.grid(row=0, column=1, sticky="we", pady=2, padx=(5, 0))
+        tk.Button(grid_f, text="📅", relief="flat", bg="#f0f0f0", 
+                  command=lambda: self._open_calendar_picker(self.ts_start_var)).grid(row=0, column=2, padx=2)
+
+        # Row 2: End
+        ttk.Label(grid_f, text="End:").grid(row=1, column=0, sticky="w", pady=2)
+        ent_end = ttk.Entry(grid_f, textvariable=self.ts_end_var)
+        ent_end.grid(row=1, column=1, sticky="we", pady=2, padx=(5, 0))
+        tk.Button(grid_f, text="📅", relief="flat", bg="#f0f0f0", 
+                  command=lambda: self._open_calendar_picker(self.ts_end_var)).grid(row=1, column=2, padx=2)
+
+        # Trace logic to ensure color stays correct
+        self.ts_start_var.trace_add("write", lambda *args: ent_start.config(foreground="black"))
+        self.ts_end_var.trace_add("write", lambda *args: ent_end.config(foreground="black"))
+
+        # Interval Row
+        interval_f = ttk.Frame(grid_f)
+        interval_f.grid(row=2, column=0, columnspan=3, sticky="w", pady=5)
+        ttk.Label(interval_f, text="Interval:").pack(side="left")
+        ttk.Entry(interval_f, textvariable=self.ts_step_var, width=5).pack(side="left", padx=5)
+        ttk.Label(interval_f, text="days").pack(side="left")
 
     def _clear_coord_hint(self, widget, hint_text):
         """Clears the 'Latitude/Longitude' text when the user clicks to type."""
@@ -2025,25 +2071,23 @@ class GEE_Local_Downloader_App:
             self.log(f"Jump Error: {e}")
 
     def clear_placeholder(self, event):
-        """When user clicks: turn text black and clear if it's the default date."""
-        current_val = self.target_date_var.get()
-        # Change color to black immediately so user typing is visible
-        self.date_entry.configure(foreground="black")
+        """Turn text black when user clicks. Only clear if it's the 'hint' value."""
+        widget = event.widget
+        current_val = widget.get()
+        widget.config(foreground="black")
         
-        if current_val == self.yesterday_val:
-            self.target_date_var.set("")
+        # If it's the 'yesterday' hint or the 'YYYY-MM-DD' hint, clear it for typing
+        if current_val == self.yesterday_val or "2025-" in current_val:
+            # We don't wipe it if it looks like a real date the user might want to edit
+            if current_val == self.yesterday_val:
+                widget.delete(0, tk.END)
 
     def restore_placeholder(self, event):
-        """When user clicks away: if empty, restore grey yesterday hint."""
-        current_val = self.target_date_var.get().strip()
-        
-        if not current_val:
-            # Nothing typed? Put the hint back and turn it grey
-            self.target_date_var.set(self.yesterday_val)
-            self.date_entry.configure(foreground="grey")
-        else:
-            # User typed something? Keep it black
-            self.date_entry.configure(foreground="black")
+        """Restore grey hint only if the field is completely empty."""
+        widget = event.widget
+        if not widget.get().strip():
+            widget.insert(0, self.yesterday_val)
+            widget.config(foreground="grey")
 
     def sync_map_offline(self):
         """Final corrected sync: Handles existing tiles gracefully."""
@@ -2446,7 +2490,7 @@ class GEE_Local_Downloader_App:
     
     def populate_layers_tree(self):
         """Recursively scans the Data folder and builds a multi-level File Explorer tree."""
-        # 1. Take a snapshot of currently open folders (using their exact path/iid)
+        # 1. Snapshot open folders
         open_folders = set()
         def get_open_nodes(node=""):
             for child in self.layers_tree.get_children(node):
@@ -2466,77 +2510,82 @@ class GEE_Local_Downloader_App:
             self.log("Data folder is empty or not created yet.")
             return
 
-        # Prepare a list of "Clean" active paths for comparison
         active_paths = []
         if hasattr(self, 'active_layer_polygons'):
             active_paths = [os.path.normpath(p) for p in self.active_layer_polygons.keys()]
 
-        # 2. Recursive function to handle infinite sub-folders
+        # 2. Recursive function
         def add_nodes(parent_path, parent_node):
             try:
                 entries = sorted(os.listdir(parent_path))
+                entries = [e for e in entries if not e.startswith(('.', '$', 'Thumbs.db'))]
                 folders = [e for e in entries if os.path.isdir(os.path.join(parent_path, e))]
                 files = [e for e in entries if os.path.isfile(os.path.join(parent_path, e))]
                 
-                # Add Folders first
                 for folder_name in folders:
                     folder_path = os.path.normpath(os.path.join(parent_path, folder_name))
                     is_open = folder_path in open_folders
-                    
-                    # We assign the absolute folder path as its internal ID (iid)
                     f_node = self.layers_tree.insert(parent_node, "end", iid=folder_path, text=f"📁 {folder_name}", open=is_open)
-                    
-                    # Drill down into this folder (Recursion!)
                     add_nodes(folder_path, f_node)
                     
-                # Add Files second
+                # --- ENHANCED FILE SCANNER ---
                 for file_name in files:
-                    if file_name.endswith(('.geojson', '.tif', '.shp')):
+                    # Use .lower() to ensure .TIF and .tiff are caught
+                    ext = os.path.splitext(file_name)[1].lower()
+                    
+                    if ext in ('.geojson', '.tif', '.tiff', '.shp'):
                         file_path = os.path.normpath(os.path.join(parent_path, file_name))
                         
-                        if file_name.endswith('.shp'): icon = "📐" 
-                        elif file_name.endswith('.geojson'): icon = "📍"
-                        else: icon = "🗺️"
+                        # Dynamic Icon Mapping
+                        if ext == '.shp': 
+                            icon = "📐" 
+                        elif ext == '.geojson': 
+                            icon = "📍"
+                        else: 
+                            icon = "🗺️" # For .tif and .tiff
                             
                         checkbox = "☑ " if file_path in active_paths else "☐ "
+                        
+                        # We use the full path in 'values' so toggle_map_layer knows exactly what to load
                         self.layers_tree.insert(parent_node, "end", text=f"{checkbox}{icon} {file_name}", values=(file_path,))
                         
             except PermissionError:
-                pass # Ignore system folders we don't have access to
-
-        # Kick off the recursive build
+                pass
+        
         add_nodes(data_dir, "")
 
     def toggle_map_layer(self, event):
         """Routes files to the interactive map. Handles both Vectors and Rasters."""
-        # Identify EXACTLY what row the mouse was hovering over when clicked
+        # 1. Identify exactly what row the mouse was hovering over
         item_id = self.layers_tree.identify_row(event.y)
         if not item_id: return
         
         values = self.layers_tree.item(item_id, "values")
-        # SAFETY CHECK: If the clicked item has no values, it's a folder! 
-        # Ignore the click and let Tkinter expand/collapse the folder normally.
-        if not values: return 
+        if not values: return # Folder clicked
         
-        path = values[0]
+        # Path Normalization is key for the "is it already on?" check
+        path = os.path.normpath(values[0])
+        ext = os.path.splitext(path)[1].lower()
         
         # --- IF TIFF: Handle Native Image Tracking Overlay ---
-        if path.endswith('.tif'):
-            # Initialize the storage dictionary if it doesn't exist yet
+        if ext in ('.tif', '.tiff'):
             if not hasattr(self, 'active_rasters'): self.active_rasters = {}
             
             if path in self.active_layer_polygons:
-                # Turn OFF
+                # TURN OFF logic
                 if path in self.active_rasters:
                     raster = self.active_rasters[path]
                     self.map_widget.canvas.delete(raster["img_item"])
-                    raster["box_obj"].delete()
-                    del self.active_rasters[path] # Remove from memory
-                    
+                    try: raster["box_obj"].delete()
+                    except: pass
+                    del self.active_rasters[path]
+                
                 del self.active_layer_polygons[path]
                 self.log(f"Satellite overlay hidden: {os.path.basename(path)}")
             else:
-                # Turn ON
+                # TURN ON logic
+                # This calls _show_tif_preview which uses rasterio to auto-calculate 
+                # bounds, making it compatible with GEE AND manual files.
                 self._show_tif_preview(path)
                 self.active_layer_polygons[path] = True 
             
@@ -2546,28 +2595,22 @@ class GEE_Local_Downloader_App:
         # --- IF GEOJSON / SHP: Toggle interactive map polygon ---
         if path in self.active_layer_polygons:
             layer_data = self.active_layer_polygons[path]
+            # Handle structured dictionary or raw list for backward compatibility
+            to_delete = []
             if isinstance(layer_data, dict):
-                for poly in layer_data.get("polygons", []):
-                    try: poly.delete()
-                    except: pass
-                for lbl in layer_data.get("active_labels", []):
-                    try: lbl.delete()
-                    except: pass
+                to_delete = layer_data.get("polygons", []) + layer_data.get("active_labels", [])
             else:
-                for poly in layer_data:
-                    try: poly.delete()
-                    except: pass
+                to_delete = layer_data
+            
+            for obj in to_delete:
+                try: obj.delete()
+                except: pass
 
             del self.active_layer_polygons[path]
             self.log(f"Layer hidden: {os.path.basename(path)}")
-            
-            # Since deleting is instant, we refresh the UI immediately
             self.populate_layers_tree() 
-            
         else:
             self._draw_layer_to_map(path)
-            # DO NOT call self.populate_layers_tree() here!
-            # The background thread will call it when the 320MB file is fully ready.
 
     def _draw_layer_to_map(self, path):
         """Universal Vector Engine with Global UI Lockout."""
