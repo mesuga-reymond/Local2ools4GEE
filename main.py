@@ -1,4 +1,4 @@
-# GEE2DB: A Graphical Interface for Earth Engine to PostGIS Integration
+# Local2ools4GEE: A Graphical Interface for Earth Engine to PostGIS Integration
 import ctypes
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1) # Forces Windows to stay 1:1 with Python
@@ -189,7 +189,7 @@ RECORDS_FILE = "download_records.csv" # New metadata database
 class GEE_Local_Downloader_App:
     def __init__(self, root):
         self.root = root
-        self.root.title("GEE2DB")
+        self.root.title("Local2ools4GEE")
         
         try: self.root.state('zoomed')
         except: pass
@@ -434,7 +434,7 @@ class GEE_Local_Downloader_App:
 
     def on_closing(self):
         """Cleanly shuts down the app and prevents 'Main thread not in main loop' errors."""
-        if messagebox.askokcancel("Quit", "Do you want to close GEE2DB?"):
+        if messagebox.askokcancel("Quit", "Do you want to close Local2ools4GEE?"):
             # 1. Signal all loops to stop immediately
             self.is_closing = True 
             self.tracker_running = False
@@ -456,44 +456,72 @@ class GEE_Local_Downloader_App:
             os._exit(0)
 
     def create_widgets(self):
-        # --- DYNAMIC NOTEBOOK STYLING ---
-        style = ttk.Style()
-        style.theme_use('clam') 
-
-        # Base style for all tabs
-        style.configure("TNotebook.Tab", 
-                        padding=[8, 4], 
-                        font=("Segoe UI", 9),
-                        background="#e1e1e1")
-
-        # THE "EXPANDER" LOGIC: Grow the tab and bold the text when selected
-        style.map("TNotebook.Tab",
-                  padding=[("selected", [12, 6])], 
-                  font=[("selected", ("Segoe UI", 9, "bold"))],
-                  background=[("selected", "#ffffff")],
-                  foreground=[("selected", "#0077b6")])
-
-        paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        paned.pack(fill="both", expand=True, padx=5, pady=5)
-
-        # WIDEN PANEL: Increased to 520 to allow room for the expanded "Database" name
-        self.left_panel = ttk.Frame(paned, width=520) 
-        self.left_panel.pack_propagate(False) 
+        # 1. Main Layout: Sidebar on the left, Content on the right
+        # Increased width slightly to 55 to give the emojis breathing room
+        self.sidebar = tk.Frame(self.root, bg="#2c3e50", width=55) 
+        self.sidebar.pack(side="left", fill="y")
         
+        # CRITICAL FIX: Since we use .grid() inside the sidebar, we MUST use grid_propagate 
+        # to lock the width. pack_propagate will be ignored by Tkinter here!
+        self.sidebar.grid_propagate(False) 
+
+        # Main Paned window now sits inside the remaining space
+        paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        paned.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+
+        self.left_panel = ttk.Frame(paned, width=480) 
+        self.left_panel.pack_propagate(False) 
         self.right_frame = ttk.Frame(paned)
         
-        # Divider weights
         paned.add(self.left_panel, weight=0) 
         paned.add(self.right_frame, weight=1)
 
-        self.notebook = ttk.Notebook(self.left_panel)
-        self.notebook.pack(fill="both", expand=True)
+        # 2. Container for the "Tab" Frames
+        self.tab_container = ttk.Frame(self.left_panel)
+        self.tab_container.pack(fill="both", expand=True)
 
-        # ==========================================
-        # --- TAB 1: CONTROLS (Gap-Killer Fix) ---
-        # ==========================================
-        self.tab_controls = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_controls, text=" ⚙️ Control ")
+        # Create the frames that were previously "Tabs"
+        self.tab_controls = ttk.Frame(self.tab_container)
+        self.tab_search = ttk.Frame(self.tab_container)
+        self.tab_downloads = ttk.Frame(self.tab_container)
+        self.tab_layers = ttk.Frame(self.tab_container)
+        self.tab_db = ttk.Frame(self.tab_container)
+
+        self.all_tabs = [self.tab_controls, self.tab_search, self.tab_downloads, self.tab_layers, self.tab_db]
+
+        # 3. Vertical Sidebar Button Logic (Locked Grid Alignment)
+        self.sidebar.columnconfigure(0, weight=1) # Forces column to be the full width of the sidebar
+        self.sidebar_buttons = []
+        
+        # Spacer at the top
+        tk.Frame(self.sidebar, bg="#2c3e50", height=10).grid(row=0, column=0)
+
+        def create_icon_btn(icon, index, tooltip_text):
+            # THE FIX: Removed fixed 'width=4' and switched to "Segoe UI Emoji"
+            # This forces Windows to render all emojis with identical bounding boxes.
+            btn = tk.Button(self.sidebar, text=icon, font=("Segoe UI Emoji", 13),
+                            bg="#2c3e50", fg="#8899a6", relief="flat", 
+                            borderwidth=0, highlightthickness=0,
+                            activebackground="#34495e", activeforeground="white",
+                            cursor="hand2", pady=10, 
+                            command=lambda: self.switch_tab(index))
+            
+            # sticky="ew" centers the button horizontally by locking to the column edges
+            btn.grid(row=index + 1, column=0, sticky="ew", pady=2, padx=2)
+            
+            self.create_tooltip(btn, tooltip_text)
+            self.sidebar_buttons.append(btn)
+            return btn
+
+        # Create icons - perfectly centered and uniform
+        create_icon_btn("⚙️", 0, "Control Settings")
+        create_icon_btn("🔍", 1, "Search Location")
+        create_icon_btn("📥", 2, "Task Manager")
+        create_icon_btn("🗂️", 3, "Layer Management")
+        create_icon_btn("🗄️", 4, "Database & Deployment")
+
+        # Initial view
+        self.switch_tab(0)
 
         # THE FIX: 
         # Row 0 (Settings) gets weight 0 -> It stays as small as possible (showing frames 1-4).
@@ -644,7 +672,7 @@ class GEE_Local_Downloader_App:
         stitch_help.pack(side="left", padx=(0, 10)) 
         self.create_tooltip(stitch_help, 
             "GEE downloads large areas in multiple 'tiles' to avoid memory errors. \n"
-            "If enabled, GEE2DB will automatically stitch these tiles back into \n"
+            "If enabled, Local2ools4GEE will automatically stitch these tiles back into \n"
             "one seamless .TIF file once the download finishes.")
 
         # 3. Keep Original Tiles Checkbox
@@ -675,11 +703,6 @@ class GEE_Local_Downloader_App:
                                         state="readonly")
         self.crs_dropdown.pack(side="left", fill="x", expand=True)
 
-        # ==========================================
-        # --- TAB 2: SEARCH ---
-        # ==========================================
-        self.tab_search = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(self.tab_search, text=" 🔍 Search ")
 
         s_frame = ttk.LabelFrame(self.tab_search, text=" Find Location or Coordinates ", padding=10)
         s_frame.pack(fill="x", pady=5)
@@ -738,11 +761,6 @@ class GEE_Local_Downloader_App:
         
         self.history_listbox.bind("<Double-1>", lambda e: self.jump_from_history())
 
-        # ==========================================
-        # --- TAB 3: TASK MANAGER ---
-        # ==========================================
-        self.tab_downloads = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(self.tab_downloads, text=" 📥 Tasks ")
 
         # --- NEW: Action Buttons Frame ---
         task_btn_frame = ttk.Frame(self.tab_downloads)
@@ -801,11 +819,6 @@ class GEE_Local_Downloader_App:
         self.record_table.bind("<Double-1>", self.on_record_double_click)
         self.record_table.bind("<Button-3>", self.show_table_context_menu)
 
-        # ==========================================
-        # --- TAB 4: LAYERS ---
-        # ==========================================
-        self.tab_layers = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(self.tab_layers, text=" 🗂️Layers ")
 
         l_btn_frame = ttk.Frame(self.tab_layers)
         l_btn_frame.pack(fill="x", pady=(0, 5))
@@ -850,11 +863,6 @@ class GEE_Local_Downloader_App:
         self.layers_tree.bind("<ButtonRelease-1>", self.toggle_map_layer)
         self.layers_tree.bind("<Button-3>", self.show_layers_context_menu)
 
-        # ==========================================
-        # --- TAB 5: GEODATABASE & DEPLOYMENT ---
-        # ==========================================
-        self.tab_db = ttk.Frame(self.notebook, padding=10)
-        self.notebook.add(self.tab_db, text=" 🗄️ Database & Deploy ")
 
         # --- 1. Secure Authentication Settings ---
         auth_f = ttk.LabelFrame(self.tab_db, text=" 🔐 PostGIS & GeoServer Credentials ", padding=15)
@@ -960,7 +968,7 @@ class GEE_Local_Downloader_App:
 
         # --- THE ADOBE SPLASH CARD ---
         self.splash_card = tk.Frame(self.root, bg="white", padx=40, pady=40, highlightbackground="#00a8e8", highlightthickness=2)
-        tk.Label(self.splash_card, text="GEE2DB", fg="#00a8e8", bg="white", font=("Segoe UI", 28, "bold")).pack()
+        tk.Label(self.splash_card, text="Local2ools4GEE", fg="#00a8e8", bg="white", font=("Segoe UI", 28, "bold")).pack()
         self.lock_label = tk.Label(self.splash_card, text="Optimizing Spatial Engine...", fg="#333333", bg="white", font=("Segoe UI", 10))
         self.lock_label.pack(pady=(5, 20))
         
@@ -1512,12 +1520,12 @@ class GEE_Local_Downloader_App:
 
             # --- Column 2: Explicit Target/Suggested Indicator ---
             target_str = item['target']
-            actual_str = item['actual'][:16]
-            
-            if actual_str == "None":
+            actual_date_only = item['actual'][:10] 
+
+            if item['actual'] == "None":
                 is_suggested = "-"
                 sugg_color = "#6c757d"
-            elif actual_str == target_str:
+            elif actual_date_only == target_str:
                 is_suggested = "TARGET DATE"
                 sugg_color = "#005577" # Dark Blue
             else:
@@ -1536,19 +1544,24 @@ class GEE_Local_Downloader_App:
             def on_combo_change(event, i=idx-1, cb=combo, sl=status_lbl, s_lbl=sugg_lbl):
                 val = cb.get()
                 self.temp_schedule[i]['current_selection'] = val
-                self.temp_schedule[i]['actual'] = val[:16]
+                # Store the full timestamp for the download engine
+                self.temp_schedule[i]['actual'] = val[:16] 
                 
-                curr_actual = self.temp_schedule[i]['actual']
+                # --- THE FIX: Slice to 10 characters for a Date-only comparison ---
+                curr_actual_date = self.temp_schedule[i]['actual'][:10]
                 target_date = self.temp_schedule[i]['target']
                 
-                if curr_actual == "None":
+                if val.startswith("None") or val == "":
                     s_lbl.config(text="-", fg="#6c757d")
-                elif curr_actual == target_date:
-                    s_lbl.config(text="TARGET DATE", fg="#005577")
+                elif curr_actual_date == target_date:
+                    # Now matches "2025-03-05" == "2025-03-05"
+                    s_lbl.config(text="TARGET DATE", fg="#005577") 
                 else:
                     s_lbl.config(text="SUGGESTED DATE", fg="#e76f51")
                 
-                sl.config(text="✅ Ready" if self.temp_schedule[i]['actual'] != "None" else "❌ Skip")
+                # Update the Ready/Skip status indicator
+                is_ready = self.temp_schedule[i]['actual'] != "None"
+                sl.config(text="✅ Ready" if is_ready else "❌ Skip")
 
             combo.bind("<<ComboboxSelected>>", on_combo_change)
 
@@ -1883,7 +1896,7 @@ class GEE_Local_Downloader_App:
         from geopy.geocoders import Nominatim
         try:
             # We explicitly do NOT request 'geometry' to keep the response tiny and fast
-            geolocator = Nominatim(user_agent="GEE2DB_Scout", timeout=10)
+            geolocator = Nominatim(user_agent="Local2ools4GEE_Scout", timeout=10)
             locations = geolocator.geocode(query, exactly_one=False, limit=5)
             
             if locations:
@@ -1955,7 +1968,7 @@ class GEE_Local_Downloader_App:
         """Background worker to get the heavy zigzag lines without freezing the UI."""
         from geopy.geocoders import Nominatim
         try:
-            geolocator = Nominatim(user_agent="GEE2DB_Scout")
+            geolocator = Nominatim(user_agent="Local2ools4GEE_Scout")
             # Here we request the heavy GeoJSON data
             location = geolocator.geocode(address, exactly_one=True, geometry='geojson')
             
@@ -2187,53 +2200,53 @@ class GEE_Local_Downloader_App:
             self._keep_image_pinned()
 
     def _keep_image_pinned(self):
-        """Watchdog loop: Forces the satellite image to the ABSOLUTE top layer."""
+        """Watchdog loop: Optimized to prevent crashes during multi-layer rendering."""
         if getattr(self, 'is_closing', False) or not self.active_rasters:
             self.tracker_running = False
             return 
             
         try:
-            from PIL import ImageTk
+            # 1. Get the current map viewport to skip rendering off-screen images
+            # (min_lat, min_lon, max_lat, max_lon)
+            m_view = None
+            for method in ['get_bounds', 'get_position_bounds', 'get_bounding_box']:
+                if hasattr(self.map_widget, method):
+                    m_view = getattr(self.map_widget, method)()
+                    break
+            
             with self.raster_lock: 
                 for path, raster in list(self.active_rasters.items()):
-                    box = raster["box_obj"]
-                    
-                    # 1. Get the Anchor ID (The Red Box)
-                    poly_id = getattr(box, "canvas_polygon", getattr(box, "polygon", None))
-                    if not poly_id: continue 
-                    
-                    # 2. Get the screen location
+                    # A. Skip if the image item was deleted
+                    if not self.map_widget.canvas.find_withtag(raster["img_item"]):
+                        continue
+
+                    # B. Get the screen location of the anchor box
+                    poly_id = getattr(raster["box_obj"], "canvas_polygon", getattr(raster["box_obj"], "polygon", None))
                     bbox = self.map_widget.canvas.bbox(poly_id)
                     
                     if bbox:
                         x1, y1, x2, y2 = bbox
                         w, h = max(x2 - x1, 5), max(y2 - y1, 5)
                         
-                        # 🚀 THE ENVIRONMENT FIX: If the map wiped the canvas, respawn the image
-                        if not self.map_widget.canvas.find_withtag(raster["img_item"]):
-                            raster["img_item"] = self.map_widget.canvas.create_image(x1, y1, anchor="nw", tags="sat")
-                            raster["last_size"] = (0, 0) 
-
-                        # 3. Resize if zoomed
-                        if (w, h) != raster["last_size"] and w < 6000:
+                        # C. ONLY resize and lift if the image is actually visible on screen
+                        # This saves massive amounts of CPU/Memory
+                        if (w, h) != raster["last_size"] and w < 5000:
                             resized = raster["master_img"].resize((w, h), Image.Resampling.NEAREST)
                             raster["photo_img"] = ImageTk.PhotoImage(resized)
                             self.map_widget.canvas.itemconfig(raster["img_item"], image=raster["photo_img"])
                             raster["last_size"] = (w, h)
 
-                        # 4. PIN & LIFT: Force the image to the front of the Z-stack
                         self.map_widget.canvas.coords(raster["img_item"], x1, y1)
-                        
-                        # 🔥 This is the critical line to fight the new Map configuration:
-                        self.map_widget.canvas.tag_raise(raster["img_item"]) # Bring to front of all items
-                        self.map_widget.canvas.lift(raster["img_item"])      # Force lift above tiles
+                        # D. Use tag_raise on the whole 'sat' group at once later, 
+                        # or just lift this specific item
+                        self.map_widget.canvas.tag_raise(raster["img_item"])
                         
         except Exception: 
             pass 
         
-        # Fast 30ms heartbeat to keep the image 'glued' to the screen
+        # Slow down the heartbeat slightly to 30ms (still feels instant, but 3x lighter)
         if not getattr(self, 'is_closing', False):
-            self.root.after(10, self._keep_image_pinned)
+            self.root.after(30, self._keep_image_pinned)
 
     def _show_tif_preview(self, path):
         """High-Speed Rendering: Uses sampling and background threading to prevent UI lag."""
@@ -2305,7 +2318,7 @@ class GEE_Local_Downloader_App:
             box_obj = self.map_widget.set_polygon(box_coords, outline_color="red", border_width=2, fill_color=None)
             
             # Create the Canvas Item
-            img_item = self.map_widget.canvas.create_image(0, 0, anchor="nw", tags="persistent_sat")
+            img_item = self.map_widget.canvas.create_image(0, 0, anchor="nw", tags="sat")
 
             self.active_rasters[path] = {
                 "img_item": img_item,
@@ -2334,7 +2347,11 @@ class GEE_Local_Downloader_App:
         """Calculates the collective bounding box of all layers in a folder and zooms once."""
         all_bounds = []
         for child in self.layers_tree.get_children(folder_iid):
-            path = self.layers_tree.item(child, "values")[0]
+            vals = self.layers_tree.item(child, "values")
+            if not vals or len(vals) == 0:
+                continue
+                
+            path = vals[0]
             try:
                 if path.endswith('.tif'):
                     with rasterio.open(path) as s: 
@@ -2355,7 +2372,7 @@ class GEE_Local_Downloader_App:
             self.log("Map View: Optimized for group extent.")
 
     def show_layers_context_menu(self, event):
-        """Right-click menu for both batch folder processing and individual file toggling."""
+        """Right-click menu with smart availability check for folders."""
         iid = self.layers_tree.identify_row(event.y)
         if not iid: return
         
@@ -2364,19 +2381,28 @@ class GEE_Local_Downloader_App:
         
         children = self.layers_tree.get_children(iid)
         if children:
-            # --- USER CLICKED A FOLDER ---
+            # --- FOLDER LOGIC ---
             folder_name = self.layers_tree.item(iid, "text").replace("📁 ", "")
-            menu.add_command(label="👁️ Render All in Folder", command=lambda: self.toggle_folder_contents(iid, True, folder_name))
-            menu.add_command(label="🚫 Hide All in Folder", command=lambda: self.toggle_folder_contents(iid, False, folder_name))
+            
+            # Check if there's actually anything to render deep inside
+            has_files = self._folder_has_renderable_files(iid)
+            btn_state = tk.NORMAL if has_files else tk.DISABLED
+            
+            menu.add_command(label="👁️ Render All in Folder", state=btn_state,
+                             command=lambda: self.toggle_folder_contents(iid, True, folder_name))
+            menu.add_command(label="🚫 Hide All in Folder", state=btn_state,
+                             command=lambda: self.toggle_folder_contents(iid, False, folder_name))
             menu.add_separator()
-            menu.add_command(label="🔍 Zoom to Group Extent", command=lambda: self.zoom_to_folder_extent(iid))
+            menu.add_command(label="🔍 Zoom to Group Extent", state=btn_state,
+                             command=lambda: self.zoom_to_folder_extent(iid))
+            
+            if not has_files:
+                menu.add_command(label="(No renderable files found)", state=tk.DISABLED)
         else:
-            # --- USER CLICKED A SPECIFIC FILE ---
+            # --- INDIVIDUAL FILE LOGIC ---
             values = self.layers_tree.item(iid, "values")
             if not values: return
             path = values[0]
-            
-            # Check if this specific file is currently rendered
             is_active = path in self.active_layer_polygons
             
             if is_active:
@@ -2428,15 +2454,14 @@ class GEE_Local_Downloader_App:
     def toggle_folder_contents(self, folder_iid, turn_on, folder_name):
         """Batch processes all files and optimizes the map view for the entire group."""
         self.log(f"Batch processing '{folder_name}'...")
-        
-        # 1. Start Batch Mode
         self.is_batch_loading = True
         
         paths_to_process = []
         def get_all_file_paths(node):
             for child in self.layers_tree.get_children(node):
                 vals = self.layers_tree.item(child, "values")
-                if vals: paths_to_process.append(vals[0])
+                # Normalize paths to ensure consistency between dict keys and disk strings
+                if vals: paths_to_process.append(os.path.normpath(vals[0]))
                 else: get_all_file_paths(child)
         get_all_file_paths(folder_iid)
         
@@ -2444,46 +2469,29 @@ class GEE_Local_Downloader_App:
             self.is_batch_loading = False
             return
 
-        # 2. ZOOM TO THE "BIG PICTURE" FIRST
+        # 1. Zoom to the collective extent of all valid layers in the folder
         if turn_on:
-            all_bounds = []
-            for path in paths_to_process:
-                try:
-                    if path.endswith('.tif'):
-                        with rasterio.open(path) as s:
-                            b = transform_bounds(s.crs, 'EPSG:4326', *s.bounds)
-                            all_bounds.append(b)
-                    elif path.endswith(('.shp', '.geojson')):
-                        # Efficiently get bounds without loading the whole heavy file
-                        b = gpd.read_file(path, rows=1).to_crs("EPSG:4326").total_bounds
-                        all_bounds.append(b)
-                except: continue
+            self.zoom_to_folder_extent(folder_iid)
 
-            if all_bounds:
-                min_x = min(b[0] for b in all_bounds)
-                min_y = min(b[1] for b in all_bounds)
-                max_x = max(b[2] for b in all_bounds)
-                max_y = max(b[3] for b in all_bounds)
-                # Force the map to the "Envelope" of all layers
-                self.map_widget.fit_bounding_box((max_y, min_x), (min_y, max_x))
-
-        # 3. RENDER WITHOUT INDIVIDUAL INTERRUPTION
+        # 2. Render files without individual view jumping
         changed = False
         for path in paths_to_process:
             is_currently_on = path in self.active_layer_polygons
-            
+            ext = os.path.splitext(path)[1].lower()
+
             if turn_on and not is_currently_on:
-                if path.endswith('.tif'):
-                    self._show_tif_preview(path)
+                if ext in ('.tif', '.tiff'):
+                    # Mark active BEFORE calling preview to prevent thread collisions
                     self.active_layer_polygons[path] = True 
-                elif path.endswith(('.geojson', '.shp')):
+                    self._show_tif_preview(path)
+                elif ext in ('.geojson', '.shp'):
                     self._draw_layer_to_map(path)
                 changed = True
             elif not turn_on and is_currently_on:
                 self._force_toggle_single(path, False)
                 changed = True
                 
-        # 4. End Batch Mode
+        # 3. End Batch Mode and refresh UI indicators
         self.is_batch_loading = False
         if changed:
             self.populate_layers_tree()
@@ -2804,25 +2812,89 @@ class GEE_Local_Downloader_App:
             os.startfile(folder)
 
     def on_record_double_click(self, event):
-        """Fix: Moves map FIRST, then draws the Cyan box after a slight delay."""
+        """Lag-Free Navigation: Uses a staggered execution pipeline."""
         item = self.record_table.selection()
         if not item: return
         values = self.record_table.item(item, "values")
         path = values[6]
         
-        try:
-            with rasterio.open(path) as s: 
-                b = transform_bounds(s.crs, 'EPSG:4326', *s.bounds)
+        if not os.path.exists(path):
+            self.log(f"Navigation Error: File not found.")
+            return
+
+        # 1. Immediate UI Feedback (Feels fast to the user)
+        self.show_loading_curtain("Optimizing Viewport...")
+        self.clear_all_overlays() # Wipe old heavy data immediately
+
+        def process_navigation():
+            try:
+                # 2. Extract bounds in background
+                with rasterio.open(path) as s: 
+                    b = transform_bounds(s.crs, 'EPSG:4326', *s.bounds)
+                
+                # 3. Step 1: Move the map (The most CPU intensive part)
+                self.root.after(0, lambda: self.map_widget.fit_bounding_box((b[3], b[0]), (b[1], b[2])))
+
+                # 4. Step 2: WAIT for map to settle (300ms) before injecting the image
+                # This prevents the "Map Move" and "Image Render" from fighting
+                self.root.after(350, lambda: self._delayed_image_injection(path, b))
+                
+            except Exception as e:
+                self.root.after(0, lambda err=e: self.log(f"Nav Error: {err}"))
+            finally:
+                self.root.after(1000, self.hide_loading_curtain)
+
+        threading.Thread(target=process_navigation, daemon=True).start()
+
+    def _delayed_image_injection(self, path, b):
+        """Injects the image and HUD only after the map has finished its movement."""
+        self.manual_roi_bounds = (b[0], b[1], b[2], b[3])
+        self._draw_roi(b[0], b[1], b[2], b[3])
+        self._calculate_aoi_hectares(b)
+        self._evaluate_download_button()
+        
+        # Now render the satellite image as a preview overlay
+        self._show_tif_preview(path)
+        self.log(f"Success: Switched view to {os.path.basename(path)}")
+
+    def clear_all_overlays(self):
+        """Safely wipes all active raster overlays and ROI boxes from the map."""
+        with self.raster_lock:
+            # Clear Satellite Overlays
+            if hasattr(self, 'active_rasters'):
+                for path, raster in list(self.active_rasters.items()):
+                    self.map_widget.canvas.delete(raster["img_item"])
+                    try: raster["box_obj"].delete()
+                    except: pass
+                    # Release memory
+                    raster["photo_img"] = None 
+                    raster["master_img"] = None
+                self.active_rasters.clear()
             
-            # 1. Move the map
-            self.map_widget.fit_bounding_box((b[3], b[0]), (b[1], b[2]))
+            # Clear ROI Boxes
+            if self.roi_polygon:
+                self.roi_polygon.delete()
+                self.roi_polygon = None
             
-            # 2. Wait 250ms for the map to 'settle' so it doesn't wipe the drawing
-            self.root.after(250, lambda: self._draw_roi(b[0], b[1], b[2], b[3]))
-            
-            self.manual_roi_bounds = (b[0], b[1], b[2], b[3])
-            self._calculate_aoi_hectares(b)
-        except Exception as e: self.log(f"Nav Error: {e}")
+            # Reset HUD
+            self.aoi_bounds_label.config(text="Switching View...", fg="gray")
+        
+        # Stop the watchdog temporarily until the new image is ready
+        self.tracker_running = False
+
+    def _apply_nav_results(self, b, path):
+        """Helper to apply results safely to the UI thread."""
+        self.manual_roi_bounds = (b[0], b[1], b[2], b[3])
+        
+        # Move the map first
+        self.map_widget.fit_bounding_box((b[3], b[0]), (b[1], b[2]))
+        
+        # Stagger the overlays so they don't 'pop' at the same time as the zoom
+        self.root.after(300, lambda: self._draw_roi(b[0], b[1], b[2], b[3]))
+        self.root.after(400, lambda: self._calculate_aoi_hectares(b))
+        self.root.after(500, self._evaluate_download_button)
+        
+        self.log(f"Navigation: View synced to {os.path.basename(path)}")
 
     # --- Mapping Interaction ---
     def track_movement(self, event):
@@ -3215,13 +3287,20 @@ class GEE_Local_Downloader_App:
         for opt in data['all_options']:
             opt_dt = datetime.strptime(opt['date'][:10], "%Y-%m-%d").date()
             indicator = "(TARGET)" if opt_dt == target_dt else "(PAST)" if opt_dt < target_dt else "(FUTURE)"
-            lb.insert(tk.END, f"{opt['date']} | {opt['clouds']}% {indicator}")
+            
+            # Format the listbox text
+            cloud_txt = f"{opt['clouds']}% CLOUDS" if opt['clouds'] != "Radar" else "RADAR"
+            lb.insert(tk.END, f"{opt['date']} | {cloud_txt} - {indicator}")
 
         def select():
             idx = lb.curselection()
             if idx:
                 selected = data['all_options'][idx[0]]
-                self.temp_schedule[schedule_idx]['actual'], self.temp_schedule[schedule_idx]['clouds'] = selected['date'], f"{selected['clouds']}%"
+                # Format the selection callback text
+                cloud_val = selected['clouds']
+                cloud_str = f"{cloud_val}%" if cloud_val != "Radar" else "Radar"
+                
+                self.temp_schedule[schedule_idx]['actual'], self.temp_schedule[schedule_idx]['clouds'] = selected['date'], cloud_str
                 callback(); pick_win.destroy()
 
         ttk.Button(pick_win, text="Select This Date", command=select).pack(pady=10)
@@ -3381,10 +3460,18 @@ class GEE_Local_Downloader_App:
                         processed_candidates.sort(key=master_sort)
 
                         best = processed_candidates[0]
+                        
+                        # Dynamically build the cloud string to avoid "Radar% Clouds"
+                        best_cloud_str = f"{best['clouds']}% Clouds" if best['clouds'] != "Radar" else "Radar"
+                        
                         scouted_schedule.append({
                             'target': t_date, 'actual': best['date'], 
-                            'current_selection': f"{best['date']} | {best['clouds']}% {best['label']}",
-                            'options': [f"{c['date']} | {c['clouds']}% {c['label']}" for c in processed_candidates]
+                            'current_selection': f"{best['date']} | {best_cloud_str} {best['label']}",
+                            'options': [
+                                f"{c['date']} | {str(c.get('clouds')) + '% Clouds' if c.get('clouds') != 'Radar' else 'Radar'} {c['label']}" 
+                                for c in processed_candidates
+                            ],
+                            'all_options': processed_candidates # Added to prevent a potential crash in _pick_alternative_pass
                         })
                     else:
                         scouted_schedule.append({'target': t_date, 'actual': "None", 'options': []})
@@ -3445,9 +3532,12 @@ class GEE_Local_Downloader_App:
         save_p = filedialog.asksaveasfilename(title="Create Project Workspace", initialdir=data_dir, initialfile=suggested_name)
         
         if save_p:
-            self.notebook.select(self.tab_downloads)
+            self.switch_tab(2)
+            self.tracker_running = True  # Ensures the sidebar knows to stay highlighted
+            self.sidebar_buttons[2].config(bg="#e67e22") # Turn icon orange immediately
             self.progress_bar.config(mode='indeterminate')
             self.progress_bar.start()
+            self.progress_bar.focus_set()
 
             # --- NEW: Reset Cancel Flag and Enable Button ---
             self.cancel_download_flag = False
@@ -3644,12 +3734,28 @@ class GEE_Local_Downloader_App:
                     meta = {
                         "Date": current_target_date, 
                         "File Name": f"[{original_project_name}] {current_target_date}",
-                        "Dataset": ds_name, "CRS": target_crs, 
-                        "Bounds": f"Rect({miny:.2f}, {minx:.2f})", "Path": final_date_path
+                        "Dataset": ds_name, 
+                        "CRS": target_crs, 
+                        "Bounds": f"Rect({miny:.2f}, {minx:.2f})", 
+                        "Path": os.path.normpath(final_date_path) # Ensure path is clean
                     }
+
+                    # 2. Save to CSV and PostGIS
                     self.save_metadata_to_file(meta)
                     threading.Thread(target=self.db_manager.push_metadata, args=(meta, self.log), daemon=True).start()
-                    self.root.after(0, lambda rid=row_iid, m=meta: self.record_table.item(rid, values=("✅ Found", m["Date"], m["File Name"], m["Dataset"], m["CRS"], m["Bounds"], m["Path"])))
+
+                    # 3. THE FIX: Explicitly update the UI row values
+                    # We pass the full tuple to 'values' to ensure 'Pending' is overwritten by the real Path
+                    self.root.after(0, lambda rid=row_iid, m=meta: self.record_table.item(
+                        rid, 
+                        values=("✅ Found", m["Date"], m["File Name"], m["Dataset"], m["CRS"], m["Bounds"], m["Path"])
+                    ))
+
+                    # 4. AUTO-RENDER: Trigger the map overlay immediately so you don't have to click
+                    self.root.after(100, lambda p=final_date_path: self._show_tif_preview(p))
+                    
+                    # 5. REFRESH LAYERS: Update the File Explorer tab (Tab 4)
+                    self.root.after(200, self.populate_layers_tree)
                 
                 batch_pct = ((date_idx + 1) / len(date_list)) * 100
                 self.root.after(0, lambda v=batch_pct: self.progress_bar.config(value=v))
@@ -3666,9 +3772,41 @@ class GEE_Local_Downloader_App:
                 self.btn_download.config(state="normal"), 
                 self.btn_cancel_dl.config(state="disabled", text="🛑 Cancel Download"), 
                 self.progress_bar.stop(), 
+                self.sidebar_buttons[2].config(bg="#2c3e50"), # <--- RESET COLOR
                 self.progress_bar.config(mode='determinate', value=0), 
                 self.lbl_progress_detail.config(text="Done.")
             ))
+    def switch_tab(self, index):
+        """Hides all frames and highlights the active sidebar icon."""
+        for frame in self.all_tabs:
+            frame.pack_forget()
+        self.all_tabs[index].pack(fill="both", expand=True)
+
+        for i, btn in enumerate(self.sidebar_buttons):
+            if i == index:
+                # Current Tab: Always Cyan
+                btn.config(bg="#00a8e8", fg="white") 
+            elif i == 2 and self.tracker_running:
+                # Tasks Tab: Stay "Alert Orange" if a download is active
+                btn.config(bg="#e67e22", fg="white")
+            else:
+                # Inactive Tabs: Muted
+                btn.config(bg="#2c3e50", fg="#8899a6")
+
+    def _folder_has_renderable_files(self, folder_iid):
+        """Recursively checks if a folder or any of its subfolders contains a spatial file."""
+        children = self.layers_tree.get_children(folder_iid)
+        for child in children:
+            vals = self.layers_tree.item(child, "values")
+            if vals: # This is a file
+                path = vals[0].lower()
+                if path.endswith(('.tif', '.tiff', '.shp', '.geojson')):
+                    return True
+            else: # This is a subfolder, check inside it
+                if self._folder_has_renderable_files(child):
+                    return True
+        return False
+                
 if __name__ == "__main__":
     root = tk.Tk()
     app = GEE_Local_Downloader_App(root)
