@@ -458,7 +458,7 @@ class GEE_Local_Downloader_App:
     def create_widgets(self):
         # 1. Main Layout: Sidebar on the left, Content on the right
         # Increased width slightly to 55 to give the emojis breathing room
-        self.sidebar = tk.Frame(self.root, bg="#2c3e50", width=55) 
+        self.sidebar = tk.Frame(self.root, bg="#f0f0f0", width=55) 
         self.sidebar.pack(side="left", fill="y")
         
         # CRITICAL FIX: Since we use .grid() inside the sidebar, we MUST use grid_propagate 
@@ -494,15 +494,15 @@ class GEE_Local_Downloader_App:
         self.sidebar_buttons = []
         
         # Spacer at the top
-        tk.Frame(self.sidebar, bg="#2c3e50", height=10).grid(row=0, column=0)
+        tk.Frame(self.sidebar, bg="#f0f0f0", height=10).grid(row=0, column=0)
 
         def create_icon_btn(icon, index, tooltip_text):
             # THE FIX: Removed fixed 'width=4' and switched to "Segoe UI Emoji"
             # This forces Windows to render all emojis with identical bounding boxes.
             btn = tk.Button(self.sidebar, text=icon, font=("Segoe UI Emoji", 13),
-                            bg="#2c3e50", fg="#8899a6", relief="flat", 
-                            borderwidth=0, highlightthickness=0,
-                            activebackground="#34495e", activeforeground="white",
+                bg="#f0f0f0", fg="#555555", relief="flat",  # Light background, dark gray icons
+                borderwidth=0, highlightthickness=0,
+                activebackground="#e0e0e0", activeforeground="black",
                             cursor="hand2", pady=10, 
                             command=lambda: self.switch_tab(index))
             
@@ -904,7 +904,7 @@ class GEE_Local_Downloader_App:
         deploy_f = ttk.LabelFrame(self.tab_db, text=" 🚀 GeoServer API Deployment ", padding=10)
         deploy_f.pack(fill="x", pady=10)
 
-        ttk.Button(deploy_f, text="1. Sync AI4CAF to GeoServer", command=self.run_full_deployment).pack(fill="x", pady=2)
+        ttk.Button(deploy_f, text="1. Sync Data to GeoServer", command=self.run_full_deployment).pack(fill="x", pady=2)
         
         # NEW: Dropdown menu for individual layers
         ttk.Label(deploy_f, text="Select Layer to View:").pack(anchor="w", pady=(5, 0))
@@ -1172,17 +1172,55 @@ class GEE_Local_Downloader_App:
                     file_name = os.path.basename(tif_path)
                     safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', os.path.splitext(file_name)[0])
                     
-                    # Create 8-bit visual proxy
+                    # 1. Define the web-optimized dynamic stretch
+                    def web_stretch(b, is_radar=False):
+                        if is_radar:
+                            valid = b[b > -999]
+                            if valid.size == 0: return (b * 0).astype(np.uint8)
+                            low, high = -25.0, 0.0
+                            stretched = np.clip((b - low) / (high - low) * 255, 0, 255)
+                            return (255 * (stretched / 255) ** 0.8).astype(np.uint8)
+                        else:
+                            valid = b[b > 0]
+                            if valid.size == 0: return (b * 0).astype(np.uint8)
+                            sample = valid[::10]
+                            low, high = np.percentile(sample, (2, 98))
+                            return np.clip((b - low) / (max(high - low, 1)) * 255, 0, 255).astype(np.uint8)
+
+                    # 2. Create 8-bit visual proxy
                     visual_path = tif_path.replace(".tif", "_tmp_v.tif")
+                    is_sar = "_S1_" in os.path.basename(tif_path)
+                    
                     with rasterio.open(tif_path) as src:
                         meta = src.meta.copy()
-                        meta.update(dtype='uint8', count=3, compress='lzw')
+                        meta.update(dtype='uint8', count=3, compress='lzw') # Force 3 bands for Web RGB
+                        
                         with rasterio.open(visual_path, 'w', **meta) as dst:
-                            for b_idx in range(1, 4):
-                                band = src.read(b_idx)
-                                # Fast approximate stretch for web
-                                visual_band = np.clip(band / 11.7, 0, 255).astype(np.uint8)
-                                dst.write(visual_band, b_idx)
+                            if is_sar and src.count >= 2:
+                                # SAR Dual-Pol (Red=VV, Green=VH, Blue=Synthetic Ratio)
+                                vv_raw = src.read(1)
+                                vh_raw = src.read(2)
+                                
+                                vv = web_stretch(vv_raw, is_radar=True)
+                                vh = web_stretch(vh_raw, is_radar=True)
+                                ratio = np.clip((vv_raw - vh_raw) * 10, 0, 255).astype(np.uint8)
+                                
+                                dst.write(vv, 1)
+                                dst.write(vh, 2)
+                                dst.write(ratio, 3)
+                                
+                            elif src.count >= 3:
+                                # Standard Optical (S2, L8/9)
+                                for b_idx in range(1, 4):
+                                    band_raw = src.read(b_idx)
+                                    dst.write(web_stretch(band_raw, is_radar=False), b_idx)
+                                    
+                            else:
+                                # Fallback (Single band files like SRTM DEM or Mono-pol SAR)
+                                gray_raw = src.read(1)
+                                gray = web_stretch(gray_raw, is_radar=is_sar)
+                                for b_idx in range(1, 4):
+                                    dst.write(gray, b_idx)
 
                     # Upload to GeoServer
                     store_url = f"{gs_url}/workspaces/{ws}/coveragestores/{safe_name}"
@@ -1483,7 +1521,9 @@ class GEE_Local_Downloader_App:
         scrollbar.pack(side="right", fill="y")
         
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            # Check if the canvas still exists before scrolling to prevent TclError
+            if canvas.winfo_exists():
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
 
         # --- 4 COLUMNS NOW ---
@@ -1577,7 +1617,9 @@ class GEE_Local_Downloader_App:
         def cancel():
             canvas.unbind_all("<MouseWheel>")
             review_win.destroy()
-        
+
+        review_win.protocol("WM_DELETE_WINDOW", cancel)
+
         btn_confirm = tk.Button(action_bar, text="Confirm & Start Batch", bg="#00a8e8", fg="white", 
                                 font=("Segoe UI", 9, "bold"), relief="flat", padx=15, pady=5, cursor="hand2", command=confirm)
         btn_confirm.pack(side="right", padx=(10, 0))
@@ -2271,26 +2313,50 @@ class GEE_Local_Downloader_App:
                     data = src.read(out_shape=(src.count, 512, 512), resampling=rasterio.enums.Resampling.bilinear)
                     
                     # 3. FAST STRETCH: Use a 10% sample to find percentiles (Massive speed gain)
-                    def fast_stretch(b):
-                        valid = b[b > 0]
-                        if valid.size == 0: return (b * 0).astype(np.uint8)
-                        
-                        # Only use every 10th pixel to calculate the histogram/percentile
-                        sample = valid[::10] 
-                        low, high = np.percentile(sample, (2, 98))
-                        return np.clip((b - low) / (max(high - low, 1)) * 255, 0, 255).astype(np.uint8)
+                    # 3. FAST STRETCH: Upgraded with Radar-awareness and Gamma boost
+                    def fast_stretch(b, is_radar=False):
+                        if is_radar:
+                            # SAR data is usually in Decibels (-30 to 0) or raw backscatter.
+                            valid = b[b > -999] # Ignore deep nodata
+                            if valid.size == 0: return (b * 0).astype(np.uint8)
+                            
+                            # Fixed bounds for standard C-band SAR
+                            low, high = -25.0, 0.0
+                            stretched = np.clip((b - low) / (high - low) * 255, 0, 255)
+                            # Apply slight Gamma correction (0.8) to lift dark mid-tones
+                            return (255 * (stretched / 255) ** 0.8).astype(np.uint8)
+                        else:
+                            # Standard Optical Stretch
+                            valid = b[b > 0]
+                            if valid.size == 0: return (b * 0).astype(np.uint8)
+                            sample = valid[::10] 
+                            low, high = np.percentile(sample, (2, 98))
+                            return np.clip((b - low) / (max(high - low, 1)) * 255, 0, 255).astype(np.uint8)
 
                     # Create Alpha mask from the first band
                     mask = (data[0] == 0).astype(np.uint8) * 255
                     alpha = 255 - mask
 
-                    if src.count >= 3:
+                    # Detect if it's Sentinel-1 based on your app's naming convention
+                    is_sar = "_S1_" in os.path.basename(path)
+
+                    if is_sar and src.count >= 2:
+                        # Typical S1 Dual-Pol Visualization: Red=VV, Green=VH, Blue=Ratio(VV/VH)
+                        vv = fast_stretch(data[0], is_radar=True)
+                        vh = fast_stretch(data[1], is_radar=True)
+                        
+                        # Synthetic Blue band (VV - VH in dB creates a nice structural contrast)
+                        ratio = np.clip((data[0] - data[1]) * 10, 0, 255).astype(np.uint8)
+                        img_array = np.dstack((vv, vh, ratio, alpha))
+                        
+                    elif src.count >= 3:
                         r = fast_stretch(data[0])
                         g = fast_stretch(data[1])
                         b_band = fast_stretch(data[2])
                         img_array = np.dstack((r, g, b_band, alpha))
+                        
                     else:
-                        gray = fast_stretch(data[0])
+                        gray = fast_stretch(data[0], is_radar=is_sar)
                         img_array = np.dstack((gray, gray, gray, alpha))
 
                     base_pil_image = Image.fromarray(img_array, 'RGBA')
@@ -3785,13 +3851,13 @@ class GEE_Local_Downloader_App:
         for i, btn in enumerate(self.sidebar_buttons):
             if i == index:
                 # Current Tab: Always Cyan
-                btn.config(bg="#00a8e8", fg="white") 
+                btn.config(bg="#545655", fg="white") 
             elif i == 2 and self.tracker_running:
                 # Tasks Tab: Stay "Alert Orange" if a download is active
-                btn.config(bg="#e67e22", fg="white")
+                btn.config(bg="#4a88d3", fg="white")
             else:
                 # Inactive Tabs: Muted
-                btn.config(bg="#2c3e50", fg="#8899a6")
+                btn.config(bg="#f0f0f0", fg="#555555")
 
     def _folder_has_renderable_files(self, folder_iid):
         """Recursively checks if a folder or any of its subfolders contains a spatial file."""
