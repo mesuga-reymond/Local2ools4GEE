@@ -218,6 +218,7 @@ class GEE_Local_Downloader_App:
         self.active_layer_polygons = {}
         self.tracker_running = False
         self.is_closing = False
+        self.is_downloading = False
         self.is_batch_loading = False  # The master switch for zoom behavior
         self.db_manager = GeodatabaseManager()
         self.vault = CredentialVault()
@@ -2242,51 +2243,59 @@ class GEE_Local_Downloader_App:
             self._keep_image_pinned()
 
     def _keep_image_pinned(self):
-        """Watchdog loop: Optimized to prevent crashes during multi-layer rendering."""
+        # Stop loop if app is closing or no images are active
         if getattr(self, 'is_closing', False) or not self.active_rasters:
             self.tracker_running = False
             return 
             
         try:
-            # 1. Get the current map viewport to skip rendering off-screen images
-            # (min_lat, min_lon, max_lat, max_lon)
-            m_view = None
-            for method in ['get_bounds', 'get_position_bounds', 'get_bounding_box']:
-                if hasattr(self.map_widget, method):
-                    m_view = getattr(self.map_widget, method)()
-                    break
+            canvas = self.map_widget.canvas
+            # Get current canvas dimensions to define the "visible" window
+            c_w, c_h = canvas.winfo_width(), canvas.winfo_height()
             
             with self.raster_lock: 
                 for path, raster in list(self.active_rasters.items()):
-                    # A. Skip if the image item was deleted
-                    if not self.map_widget.canvas.find_withtag(raster["img_item"]):
-                        continue
+                    if not canvas.find_withtag(raster["img_item"]): continue
 
-                    # B. Get the screen location of the anchor box
                     poly_id = getattr(raster["box_obj"], "canvas_polygon", getattr(raster["box_obj"], "polygon", None))
-                    bbox = self.map_widget.canvas.bbox(poly_id)
+                    bbox = canvas.bbox(poly_id)
                     
                     if bbox:
                         x1, y1, x2, y2 = bbox
-                        w, h = max(x2 - x1, 5), max(y2 - y1, 5)
                         
-                        # C. ONLY resize and lift if the image is actually visible on screen
-                        # This saves massive amounts of CPU/Memory
-                        if (w, h) != raster["last_size"] and w < 5000:
-                            resized = raster["master_img"].resize((w, h), Image.Resampling.NEAREST)
+                        # Calculate visible intersection to avoid processing off-screen pixels
+                        # Limit 'w' and 'h' to the canvas size so we don't over-allocate RAM
+                        render_x1 = max(0, x1)
+                        render_y1 = max(0, y1)
+                        render_x2 = min(c_w, x2)
+                        render_y2 = min(c_h, y2)
+                        
+                        w, h = x2 - x1, y2 - y1
+                        
+                        # Skip processing if the image is completely off-screen
+                        if x2 < 0 or y2 < 0 or x1 > c_w or y1 > c_h:
+                            canvas.itemconfig(raster["img_item"], state='hidden')
+                            continue
+                        else:
+                            canvas.itemconfig(raster["img_item"], state='normal')
+
+                        # Performance Guard: Huwag mag-resize pag sobrang laki na ng diff
+                        # 5000px is the sweet spot for modern CPUs to handle 30fps
+                        if (w, h) != raster["last_size"] and 5 < w < 5000:
+                            # Using NEAREST is mandatory here para hindi mag-lag 'yung main thread
+                            resized = raster["master_img"].resize((int(w), int(h)), Image.Resampling.NEAREST)
                             raster["photo_img"] = ImageTk.PhotoImage(resized)
-                            self.map_widget.canvas.itemconfig(raster["img_item"], image=raster["photo_img"])
+                            canvas.itemconfig(raster["img_item"], image=raster["photo_img"])
                             raster["last_size"] = (w, h)
 
-                        self.map_widget.canvas.coords(raster["img_item"], x1, y1)
-                        # D. Use tag_raise on the whole 'sat' group at once later, 
-                        # or just lift this specific item
-                        self.map_widget.canvas.tag_raise(raster["img_item"])
+                        # Sync image position to the anchor box
+                        canvas.coords(raster["img_item"], x1, y1)
+                        canvas.tag_raise(raster["img_item"])
                         
         except Exception: 
             pass 
         
-        # Slow down the heartbeat slightly to 30ms (still feels instant, but 3x lighter)
+        # 40ms provides a good balance between smoothness and CPU overhead
         if not getattr(self, 'is_closing', False):
             self.root.after(30, self._keep_image_pinned)
 
@@ -2410,32 +2419,50 @@ class GEE_Local_Downloader_App:
         self.log("Record unselected. Returned to Map View.")
 
     def zoom_to_folder_extent(self, folder_iid):
-        """Calculates the collective bounding box of all layers in a folder and zooms once."""
+        # Recursive approach para mahabol kahit yung files sa sub-folders
         all_bounds = []
-        for child in self.layers_tree.get_children(folder_iid):
-            vals = self.layers_tree.item(child, "values")
-            if not vals or len(vals) == 0:
-                continue
+
+        def collect_bounds(node):
+            for child in self.layers_tree.get_children(node):
+                vals = self.layers_tree.item(child, "values")
                 
-            path = vals[0]
-            try:
-                if path.endswith('.tif'):
-                    with rasterio.open(path) as s: 
-                        b = transform_bounds(s.crs, 'EPSG:4326', *s.bounds)
+                # Check if folder. If yes, dig deeper.
+                if not vals: 
+                    collect_bounds(child)
+                    continue
+                
+                path = vals[0]
+                ext = os.path.splitext(path)[1].lower()
+                
+                try:
+                    if ext in ('.tif', '.tiff'):
+                        with rasterio.open(path) as s: 
+                            # Force convert to EPSG:4326 para hindi mag-offset yung map display
+                            b = transform_bounds(s.crs, 'EPSG:4326', *s.bounds)
+                            all_bounds.append(b)
+                    elif ext in ('.shp', '.geojson'):
+                        # Rely on geopandas total_bounds for vector extents
+                        b = gpd.read_file(path).to_crs("EPSG:4326").total_bounds
                         all_bounds.append(b)
-                elif path.endswith(('.shp', '.geojson')):
-                    b = gpd.read_file(path).to_crs("EPSG:4326").total_bounds
-                    all_bounds.append(b)
-            except: continue
+                except Exception as e:
+                    # Skip broken files and log the error
+                    self.log(f"Error on {os.path.basename(path)}: {e}")
+                    continue
+
+        collect_bounds(folder_iid)
 
         if all_bounds:
-            # Calculate the "envelope" that contains all boxes
+            # Aggregate all boxes into one master envelope
             min_x = min(b[0] for b in all_bounds)
             min_y = min(b[1] for b in all_bounds)
             max_x = max(b[2] for b in all_bounds)
             max_y = max(b[3] for b in all_bounds)
+            
+            # Note: fit_bounding_box takes ((max_lat, min_lon), (min_lat, max_lon))
             self.map_widget.fit_bounding_box((max_y, min_x), (min_y, max_x))
-            self.log("Map View: Optimized for group extent.")
+            self.log(f"Extent synced: {len(all_bounds)} layers.")
+        else:
+            self.log("No spatial data found.")
 
     def show_layers_context_menu(self, event):
         """Right-click menu with smart availability check for folders."""
@@ -3599,7 +3626,7 @@ class GEE_Local_Downloader_App:
         
         if save_p:
             self.switch_tab(2)
-            self.tracker_running = True  # Ensures the sidebar knows to stay highlighted
+            self.is_downloading = True  # Ensures the sidebar knows to stay highlighted
             self.sidebar_buttons[2].config(bg="#e67e22") # Turn icon orange immediately
             self.progress_bar.config(mode='indeterminate')
             self.progress_bar.start()
@@ -3834,29 +3861,27 @@ class GEE_Local_Downloader_App:
             self.log(f"BATCH CRITICAL ERROR: {e}")
             self.root.after(0, lambda err=e: messagebox.showerror("Worker Crash", f"Error: {err}"))
         finally:
+            self.is_downloading = False # Pinaka-importante para mamatay 'yung highlight
             self.root.after(0, lambda: (
                 self.btn_download.config(state="normal"), 
                 self.btn_cancel_dl.config(state="disabled", text="🛑 Cancel Download"), 
                 self.progress_bar.stop(), 
-                self.sidebar_buttons[2].config(bg="#2c3e50"), # <--- RESET COLOR
+                # I-reset 'yung kulay dito agad
+                self.sidebar_buttons[2].config(bg="#f0f0f0", fg="#555555"),
                 self.progress_bar.config(mode='determinate', value=0), 
                 self.lbl_progress_detail.config(text="Done.")
             ))
     def switch_tab(self, index):
-        """Hides all frames and highlights the active sidebar icon."""
         for frame in self.all_tabs:
             frame.pack_forget()
         self.all_tabs[index].pack(fill="both", expand=True)
 
         for i, btn in enumerate(self.sidebar_buttons):
             if i == index:
-                # Current Tab: Always Cyan
                 btn.config(bg="#545655", fg="white") 
-            elif i == 2 and self.tracker_running:
-                # Tasks Tab: Stay "Alert Orange" if a download is active
+            elif i == 2 and getattr(self, 'is_downloading', False):
                 btn.config(bg="#4a88d3", fg="white")
             else:
-                # Inactive Tabs: Muted
                 btn.config(bg="#f0f0f0", fg="#555555")
 
     def _folder_has_renderable_files(self, folder_iid):
