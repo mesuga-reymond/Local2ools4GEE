@@ -497,11 +497,11 @@ class GEE_Local_Downloader_App:
         paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         paned.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
-        self.left_panel = ttk.Frame(paned, width=480) 
+        self.left_panel = ttk.Frame(paned, width=350) 
         self.left_panel.pack_propagate(False) 
         self.right_frame = ttk.Frame(paned)
         
-        paned.add(self.left_panel, weight=0) 
+        paned.add(self.left_panel, weight=0)  
         paned.add(self.right_frame, weight=1)
 
         # 2. Container for the "Tab" Frames
@@ -3054,33 +3054,33 @@ class GEE_Local_Downloader_App:
             # 1. Clear Satellite Overlays (Rasters)
             if hasattr(self, 'active_rasters'):
                 for path, raster in list(self.active_rasters.items()):
-                    self.map_widget.canvas.delete(raster["img_item"])
+                    try: self.map_widget.canvas.delete(raster["img_item"])
+                    except: pass
                     try: raster["box_obj"].delete()
                     except: pass
-                    raster["photo_img"] = None 
-                    raster["master_img"] = None
                 self.active_rasters.clear()
         
         # 2. Clear ROI Bounding Box (Cyan Outline)
-        if self.roi_polygon: 
-            self.roi_polygon.delete()
+        if hasattr(self, 'roi_polygon') and self.roi_polygon: 
+            try: self.roi_polygon.delete()
+            except: pass
             self.roi_polygon = None
         
-        # 🚀 THE FIX: Clear the Interior Grid Lines
+        # 3. Clear the Interior Grid Lines
         if hasattr(self, 'grid_lines'):
             for line in self.grid_lines:
                 try: line.delete()
                 except: pass
-            self.grid_lines = [] # Reset the list
+            self.grid_lines = [] 
 
-        # 3. Reset manual drawing variables and HUD
+        # 4. Reset manual drawing variables and HUD
         self.manual_roi_bounds = None
-        self.temp_start_coords = None # Reset first-click if mid-draw
-        self.map_widget.delete_all_marker() # Wipe Point 1 markers
+        self.temp_start_coords = None
+        self.map_widget.delete_all_marker()
         self.input_file_path.set("")
         self.aoi_bounds_label.config(text="No AOI Drawn", bg="#333333", fg="gray")
 
-        # 4. Clear Vector Layers
+        # 5. Clear Vector Layers (Polygons and Markers)
         if hasattr(self, 'active_layer_polygons'):
             for path, items in list(self.active_layer_polygons.items()):
                 if isinstance(items, dict):
