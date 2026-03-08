@@ -1,48 +1,75 @@
 # Local2ools4GEE: A Graphical Interface for Earth Engine to PostGIS Integration
+# 1. System & Windows DPI Settings
 import ctypes
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(1) # Forces Windows to stay 1:1 with Python
-except:
-    pass
-import warnings
-warnings.filterwarnings("ignore", category=FutureWarning)
-
 import os
 import sys
+import time
+import re
+import csv
+import json
+import threading
+import webbrowser
+import pathlib
+import tempfile
+import shutil
+import warnings
+from datetime import datetime, timedelta
 
+# Handle Windows DPI before any UI elements load
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    pass
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+# 2. Database & Security
+import sqlite3
+import psycopg2
+from psycopg2 import extras
+from cryptography.fernet import Fernet
+
+# 3. Core Math & Image Processing
+import numpy as np
+import math
+from PIL import Image, ImageTk, ImageGrab
+
+# 4. Geospatial Engine (GEE & Local)
+import ee
+import rasterio
+import geopandas as gpd
+import pyproj
+from rasterio.warp import transform_bounds
+from rasterio.merge import merge
+from shapely.geometry import box, shape
+import shapely.geometry
+from shapely.ops import transform
+from geopy.geocoders import Nominatim
+
+# 5. Networking & API
+import requests
+from requests.auth import HTTPBasicAuth
+
+# 6. UI Frameworks
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+import tkintermapview
+from tkcalendar import Calendar
+
+# 7. Visualization
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+# --- Environment Fixes ---
 if "PROJ_LIB" in os.environ:
     del os.environ["PROJ_LIB"]
 
 try:
-    import pyproj
     pyproj_path = os.path.join(os.path.dirname(pyproj.__file__), "proj_data")
     if os.path.exists(pyproj_path):
         os.environ["PROJ_LIB"] = pyproj_path
-except:
+except Exception:
     pass
-
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-import geopandas as gpd
-import rasterio
-from rasterio.warp import transform_bounds
-import ee
-import re
-import requests
-import os
-import csv
-import threading
-from datetime import datetime, timedelta
-import tkintermapview
-from tkcalendar import Calendar
-import time
-import psycopg2
-from psycopg2 import extras
-from PIL import Image, ImageTk
-import numpy as np
-
-import sqlite3
-from cryptography.fernet import Fernet
 
 SENTINEL_SLD = """<?xml version="1.0" encoding="UTF-8"?>
 <StyledLayerDescriptor version="1.0.0" 
@@ -1094,8 +1121,6 @@ class GEE_Local_Downloader_App:
 
     def apply_geoserver_style(self, layer_name):
         """Forcefully applies the dynamic enhanced style and recalculates statistics on GeoServer."""
-        import requests
-        from requests.auth import HTTPBasicAuth
         
         # ⚠️ Make sure these match your login settings frame in the UI
         gs_user = self.gs_user_var.get()
@@ -1142,11 +1167,6 @@ class GEE_Local_Downloader_App:
 
     def sync_to_geoserver(self):
         """High-Speed Visual Sync: Uploads previews and UPDATES the UI dropdown."""
-        import requests
-        from requests.auth import HTTPBasicAuth
-        import os, re, threading
-        import numpy as np
-        import rasterio
 
         gs_url = "http://localhost:8080/geoserver/rest"
         auth = HTTPBasicAuth(self.gs_user_var.get(), self.gs_pass_var.get())
@@ -1254,9 +1274,6 @@ class GEE_Local_Downloader_App:
 
     def open_web_map(self):
         """Generates an interactive HTML dashboard using Leaflet and opens it in your browser."""
-        import os
-        import webbrowser
-        import pathlib
 
         # 1. Grab all the layers currently loaded in your dropdown
         # NOTE: Change 'self.layer_dropdown' to whatever your Combobox variable is actually named!
@@ -1351,9 +1368,6 @@ class GEE_Local_Downloader_App:
     def take_map_snapshot(self):
         """Captures the map canvas with pixel-perfect accuracy using modern DPI scaling detection."""
         try:
-            from PIL import ImageGrab
-            import ctypes
-            import os
             
             # 1. SETUP DIRECTORY
             script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1834,7 +1848,6 @@ class GEE_Local_Downloader_App:
             widget.config(foreground="black")
 
     def load_search_history(self):
-        import json
         if os.path.exists(self.search_history_file):
             try:
                 with open(self.search_history_file, "r") as f:
@@ -1843,7 +1856,6 @@ class GEE_Local_Downloader_App:
         return []
 
     def save_search_to_history(self, data):
-        import json
         # Don't add duplicates
         if any(h['address'] == data['address'] for h in self.search_history):
             return
@@ -1936,7 +1948,6 @@ class GEE_Local_Downloader_App:
         threading.Thread(target=self._location_worker, args=(query,), daemon=True).start()
 
     def _location_worker(self, query):
-        from geopy.geocoders import Nominatim
         try:
             # We explicitly do NOT request 'geometry' to keep the response tiny and fast
             geolocator = Nominatim(user_agent="Local2ools4GEE_Scout", timeout=10)
@@ -2009,7 +2020,6 @@ class GEE_Local_Downloader_App:
 
     def _fetch_polygon_async(self, address):
         """Background worker to get the heavy zigzag lines without freezing the UI."""
-        from geopy.geocoders import Nominatim
         try:
             geolocator = Nominatim(user_agent="Local2ools4GEE_Scout")
             # Here we request the heavy GeoJSON data
@@ -2058,9 +2068,6 @@ class GEE_Local_Downloader_App:
     def _calculate_aoi_hectares(self, b):
         """Calculates approximate area in hectares for the AOI using UTM Zone 51N."""
         try:
-            from shapely.geometry import box
-            import pyproj
-            from shapely.ops import transform
 
             # Prevent crash on tiny points/lines
             if abs(b[2] - b[0]) < 0.0001 or abs(b[3] - b[1]) < 0.0001:
@@ -2190,8 +2197,6 @@ class GEE_Local_Downloader_App:
         top.title(f"Preview: {os.path.basename(path)}")
         
         try:
-            import matplotlib.pyplot as plt
-            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
             
             with rasterio.open(path) as src:
                 data = src.read(out_shape=(src.count, 800, 800))
@@ -2726,7 +2731,6 @@ class GEE_Local_Downloader_App:
     def _threaded_vector_render(self, path):
         """Optimized render: Draws boundaries in background, defers labels to zoom events."""
         try:
-            import shapely
             # STRUCTURED STORAGE: Separates fixed polygons from dynamic label data
             layer_data = {
                 "polygons": [],     # Actual boundary objects on map
@@ -3045,27 +3049,38 @@ class GEE_Local_Downloader_App:
         self.temp_markers = []
 
     def clear_all(self):
-        """Universal panic button to wipe all drawings and kill raster references safely."""
+        """Universal panic button to wipe all drawings, grids, and rasters."""
         with self.raster_lock:
-            # 1. Explicitly clear all active raster images
+            # 1. Clear Satellite Overlays (Rasters)
             if hasattr(self, 'active_rasters'):
                 for path, raster in list(self.active_rasters.items()):
                     self.map_widget.canvas.delete(raster["img_item"])
                     try: raster["box_obj"].delete()
                     except: pass
-                    # THE FIX: Nullify the reference so garbage collection is clean
                     raster["photo_img"] = None 
                     raster["master_img"] = None
                 self.active_rasters.clear()
         
-        # 2. Clear manual drawings and UI states
-        if self.roi_polygon: self.roi_polygon.delete()
-        self.roi_polygon = None
+        # 2. Clear ROI Bounding Box (Cyan Outline)
+        if self.roi_polygon: 
+            self.roi_polygon.delete()
+            self.roi_polygon = None
+        
+        # 🚀 THE FIX: Clear the Interior Grid Lines
+        if hasattr(self, 'grid_lines'):
+            for line in self.grid_lines:
+                try: line.delete()
+                except: pass
+            self.grid_lines = [] # Reset the list
+
+        # 3. Reset manual drawing variables and HUD
         self.manual_roi_bounds = None
+        self.temp_start_coords = None # Reset first-click if mid-draw
+        self.map_widget.delete_all_marker() # Wipe Point 1 markers
         self.input_file_path.set("")
         self.aoi_bounds_label.config(text="No AOI Drawn", bg="#333333", fg="gray")
 
-        # 3. Clear Vectors
+        # 4. Clear Vector Layers
         if hasattr(self, 'active_layer_polygons'):
             for path, items in list(self.active_layer_polygons.items()):
                 if isinstance(items, dict):
@@ -3082,18 +3097,52 @@ class GEE_Local_Downloader_App:
         self.log("UI and Map overlays completely cleared.")
 
     def _draw_roi(self, minx, miny, maxx, maxy):
+        # 1. Cleanup
         if self.roi_polygon: self.roi_polygon.delete()
+        if hasattr(self, 'grid_lines'):
+            for line in self.grid_lines:
+                try: line.delete()
+                except: pass
+        self.grid_lines = []
+
+        # 2. Grid Constants
+        TILE_SIZE = 512
+        scale = 10
+        step = (TILE_SIZE * scale) * 0.00000898315
+        
+        cols = math.ceil((maxx - minx) / step)
+        rows = math.ceil((maxy - miny) / step)
+        maxx = minx + (cols * step)
+        maxy = miny + (rows * step)
+        
+        self.manual_roi_bounds = (minx, miny, maxx, maxy)
+
+        # 4. Draw Snapped Master Box
         c = [(maxy, minx), (maxy, maxx), (miny, maxx), (miny, minx)]
         self.roi_polygon = self.map_widget.set_polygon(c, outline_color="cyan", border_width=3, fill_color=None)
 
-        # --- THE NEW VISUALIZATION HUD ---
-        # Format the coordinates to 5 decimal places so they align nicely
+        # 5. Draw Uniform Grid Lines
+        # Verticals
+        for i in range(1, cols):
+            lx = minx + (i * step)
+            line = self.map_widget.set_path([(maxy, lx), (miny, lx)], color="cyan", width=1)
+            self.grid_lines.append(line)
+            
+        # Horizontals
+        for i in range(1, rows):
+            ly = miny + (i * step)
+            line = self.map_widget.set_path([(ly, minx), (ly, maxx)], color="cyan", width=1)
+            self.grid_lines.append(line)
+
+        # 6. Update HUD
+        total_tiles = cols * rows
         hud_text = (
-            f"          maxy (Top Lat): {maxy:.5f}\n"
-            f"minx (L-Lon): {minx:.5f}  |  maxx (R-Lon): {maxx:.5f}\n"
-            f"          miny (Bot Lat): {miny:.5f}"
+            f"GRID SNAPPED: {cols} x {rows} ({total_tiles} Tiles)\n"
+            f"TILE DIM: {TILE_SIZE}x{TILE_SIZE} px\n"
+            "-----------------------------------\n"
+            f"Top Lat: {maxy:.5f} | L-Lon: {minx:.5f}\n"
+            f"Bot Lat: {miny:.5f} | R-Lon: {maxx:.5f}"
         )
-        # Turn the label cyan so it matches the bounding box color!
         self.aoi_bounds_label.config(text=hud_text, bg="#1a1a1a", fg="#00ffff")
 
     def browse_file(self):
@@ -3641,10 +3690,6 @@ class GEE_Local_Downloader_App:
     def _download_worker(self, path, save_p, date_list):
         """High-Fidelity Batch Downloader: Preserves all swath-checks and stitching logic."""
         try:
-            import tempfile
-            import shutil
-            from rasterio.merge import merge
-            import shapely.geometry
 
             # 1. ROOT WORKSPACE SETUP
             target_dir = os.path.dirname(save_p)
@@ -3676,15 +3721,24 @@ class GEE_Local_Downloader_App:
             target_crs = self.target_crs_var.get().split(" ")[0]
             do_stitch = self.stitch_tiles_var.get()
             
-            # 3. GRID CALCULATOR (Calculated once)
-            STEP = 0.1 
-            x_edges, curr_x = [], minx
-            while curr_x < maxx: x_edges.append(curr_x); curr_x += STEP
-            if x_edges and x_edges[-1] < maxx: x_edges.append(maxx)
-            y_edges, curr_y = [], miny
-            while curr_y < maxy: y_edges.append(curr_y); curr_y += STEP
-            if y_edges and y_edges[-1] < maxy: y_edges.append(maxy)
-            total_tiles_per_date = (len(x_edges) - 1) * (len(y_edges) - 1)
+            # --- 3. PIXEL-SNAP GRID (Must match _draw_roi) ---
+            
+            TILE_SIZE = 512
+            scale = 10
+            # Convert px dimensions to degrees
+            step = (TILE_SIZE * scale) * 0.00000898315
+            
+            cols = math.ceil((maxx - minx) / step)
+            rows = math.ceil((maxy - miny) / step)
+            
+            # Snap bounds to full tiles to prevent 'sliver' artifacts
+            maxx = minx + (cols * step)
+            maxy = miny + (rows * step)
+            
+            # Re-define edges based on snapped bounds
+            x_edges = [minx + (i * step) for i in range(cols + 1)]
+            y_edges = [miny + (i * step) for i in range(rows + 1)]
+            total_tiles_per_date = cols * rows
 
             # ==========================================
             # --- THE BATCH TEMPORAL LOOP ---
@@ -3781,7 +3835,12 @@ class GEE_Local_Downloader_App:
                             pixel_count = tile_img.select(0).reduceRegion(reducer=ee.Reducer.count(), geometry=t_roi, scale=100).getInfo()
                             if not pixel_count or list(pixel_count.values())[0] == 0: continue
 
-                            url = tile_img.getDownloadURL({'scale': scale, 'crs': target_crs, 'region': t_roi, 'format': 'GEO_TIFF'})
+                            url = tile_img.getDownloadURL({
+                                'dimensions': f"{TILE_SIZE}x{TILE_SIZE}",
+                                'crs': target_crs,
+                                'region': t_roi,
+                                'format': 'GEO_TIFF'
+                            })
                             resp = requests.get(url, stream=True)
                             resp.raise_for_status()
                             
@@ -3861,12 +3920,12 @@ class GEE_Local_Downloader_App:
             self.log(f"BATCH CRITICAL ERROR: {e}")
             self.root.after(0, lambda err=e: messagebox.showerror("Worker Crash", f"Error: {err}"))
         finally:
-            self.is_downloading = False # Pinaka-importante para mamatay 'yung highlight
+            self.is_downloading = False
             self.root.after(0, lambda: (
                 self.btn_download.config(state="normal"), 
                 self.btn_cancel_dl.config(state="disabled", text="🛑 Cancel Download"), 
                 self.progress_bar.stop(), 
-                # I-reset 'yung kulay dito agad
+                # reset 'yung kulay dito agad after download
                 self.sidebar_buttons[2].config(bg="#f0f0f0", fg="#555555"),
                 self.progress_bar.config(mode='determinate', value=0), 
                 self.lbl_progress_detail.config(text="Done.")
