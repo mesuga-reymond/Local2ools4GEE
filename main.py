@@ -514,8 +514,9 @@ class GEE_Local_Downloader_App:
         self.tab_downloads = ttk.Frame(self.tab_container)
         self.tab_layers = ttk.Frame(self.tab_container)
         self.tab_db = ttk.Frame(self.tab_container)
+        self.tab_about = ttk.Frame(self.tab_container)
 
-        self.all_tabs = [self.tab_controls, self.tab_search, self.tab_downloads, self.tab_layers, self.tab_db]
+        self.all_tabs = [self.tab_controls, self.tab_search, self.tab_downloads, self.tab_layers, self.tab_db, self.tab_about]
 
         # 3. Vertical Sidebar Button Logic (Locked Grid Alignment)
         self.sidebar.columnconfigure(0, weight=1) # Forces column to be the full width of the sidebar
@@ -547,6 +548,7 @@ class GEE_Local_Downloader_App:
         create_icon_btn("📥", 2, "Task Manager")
         create_icon_btn("🗂️", 3, "Layer Management")
         create_icon_btn("🗄️", 4, "Database & Deployment")
+        create_icon_btn("ℹ️", 5, "About & Contribute")
 
         # Initial view
         self.switch_tab(0)
@@ -941,6 +943,55 @@ class GEE_Local_Downloader_App:
 
         ttk.Button(deploy_f, text="2. Open Live Web Map (Satellite Base)", command=self.open_web_map).pack(fill="x", pady=2)
 
+        # --- 3. ABOUT & CONTRIBUTE TAB (Index 5) ---
+        about_f = ttk.Frame(self.tab_about, padding=15)
+        about_f.pack(fill="both", expand=True)
+
+        # Title Card
+        title_card = tk.Frame(about_f, bg="white", padx=15, pady=20, highlightbackground="#00a8e8", highlightthickness=2)
+        title_card.pack(fill="x", pady=(10, 20))
+
+        tk.Label(title_card, text="Local2ools4GEE", fg="#00a8e8", bg="white", font=("Segoe UI", 20, "bold")).pack()
+        
+        # Create labels as variables so we can dynamically update their wraplength later
+        lbl_subtitle = tk.Label(title_card, text="Version 1.0 | Earth Engine to PostGIS Integration", fg="#555555", bg="white", font=("Segoe UI", 9), justify="center")
+        lbl_subtitle.pack(pady=(0,15))
+
+        desc = ("A powerful local graphical interface designed to simplify the discovery, "
+                "downloading, and deployment of satellite imagery.\n\n"
+                "This project is open-source and continuously improving.")
+        
+        lbl_desc = tk.Label(title_card, text=desc, bg="white", fg="#333333", font=("Segoe UI", 9), justify="center")
+        lbl_desc.pack(pady=10)
+
+        # Contribution Section
+        contrib_f = ttk.LabelFrame(about_f, text=" 🤝 Contribute & Support ", padding=10)
+        contrib_f.pack(fill="x", pady=10)
+
+        lbl_contrib = tk.Label(contrib_f, text="Got ideas, found a bug, or want to contribute to the code? We would love to hear your meaningful comments and suggestions!", font=("Segoe UI", 9), justify="center")
+        lbl_contrib.pack(pady=(5, 15))
+
+        # --- DYNAMIC TEXT WRAPPING MAGIC ---
+        def update_wraplength(event):
+            # Calculate available width (event.width minus padding margins)
+            wrap_width = event.width - 60 
+            if wrap_width > 50: # Prevent errors if the frame gets impossibly small
+                lbl_subtitle.config(wraplength=wrap_width)
+                lbl_desc.config(wraplength=wrap_width)
+                lbl_contrib.config(wraplength=wrap_width)
+
+        # Bind the resize event of the main frame to trigger the dynamic wrapping
+        about_f.bind("<Configure>", update_wraplength)
+        # -----------------------------------
+
+        # GitHub Link Button
+        btn_github = tk.Button(contrib_f, text="⭐ View & Contribute on GitHub", bg="#24292e", fg="white", 
+                               font=("Segoe UI", 9, "bold"), relief="flat", cursor="hand2", padx=10, pady=8,
+                               command=lambda: webbrowser.open("https://github.com/mesuga-reymond/Local2ools4GEE"))
+        btn_github.pack(pady=10)
+        
+        tk.Label(about_f, text="Developed by Reymond Mesuga", font=("Segoe UI", 9, "italic"), fg="gray").pack(side="bottom", pady=20)
+
         # ==========================================
         # --- RIGHT PANEL: THE MAP ---
         # ==========================================
@@ -965,12 +1016,6 @@ class GEE_Local_Downloader_App:
         self.map_widget.canvas.bind('<Motion>', self.track_movement)
         self.map_widget.add_right_click_menu_command(label="Mark Corner", command=self.handle_manual_click, pass_coords=True)
         self.map_widget.set_position(12.87, 121.77); self.map_widget.set_zoom(6)
-
-        # Dynamic AOI Bounding Box HUD
-        self.aoi_bounds_label = tk.Label(self.map_widget, text="No AOI Drawn", bg="#333333", fg="gray", 
-                                         font=("Consolas", 9, "bold"), justify="center", relief="solid", bd=1, padx=5, pady=5)
-        # Placed in the bottom-right corner
-        self.aoi_bounds_label.place(relx=0.98, rely=0.98, anchor="se")
 
         # Dynamic AOI Bounding Box HUD
         self.aoi_bounds_label = tk.Label(self.map_widget, text="No AOI Drawn", bg="#333333", fg="gray", 
@@ -1004,6 +1049,12 @@ class GEE_Local_Downloader_App:
         style.configure("Splash.Horizontal.TProgressbar", background='#00a8e8', thickness=6)
         self.lock_progress = ttk.Progressbar(self.splash_card, orient="horizontal", length=350, mode="indeterminate", style="Splash.Horizontal.TProgressbar")
         self.lock_progress.pack(pady=5)
+
+    def _refresh_preview(self):
+        """Triggers a re-render using the last viewed file."""
+        if hasattr(self, 'current_tif_path'):
+            self.log("Refreshing map view with enhancement...")
+            self._show_tif_preview(self.current_tif_path)
 
     def prune_ghost_records(self):
         """Deletes database rows where the physical .tif file is missing from the disk."""
@@ -2247,170 +2298,150 @@ class GEE_Local_Downloader_App:
             self.tracker_running = True
             self._keep_image_pinned()
 
-    def _keep_image_pinned(self):
-        # Stop loop if app is closing or no images are active
-        if getattr(self, 'is_closing', False) or not self.active_rasters:
-            self.tracker_running = False
-            return 
-            
-        try:
-            canvas = self.map_widget.canvas
-            # Get current canvas dimensions to define the "visible" window
-            c_w, c_h = canvas.winfo_width(), canvas.winfo_height()
-            
-            with self.raster_lock: 
-                for path, raster in list(self.active_rasters.items()):
-                    if not canvas.find_withtag(raster["img_item"]): continue
-
-                    poly_id = getattr(raster["box_obj"], "canvas_polygon", getattr(raster["box_obj"], "polygon", None))
-                    bbox = canvas.bbox(poly_id)
-                    
-                    if bbox:
-                        x1, y1, x2, y2 = bbox
-                        
-                        # Calculate visible intersection to avoid processing off-screen pixels
-                        # Limit 'w' and 'h' to the canvas size so we don't over-allocate RAM
-                        render_x1 = max(0, x1)
-                        render_y1 = max(0, y1)
-                        render_x2 = min(c_w, x2)
-                        render_y2 = min(c_h, y2)
-                        
-                        w, h = x2 - x1, y2 - y1
-                        
-                        # Skip processing if the image is completely off-screen
-                        if x2 < 0 or y2 < 0 or x1 > c_w or y1 > c_h:
-                            canvas.itemconfig(raster["img_item"], state='hidden')
-                            continue
-                        else:
-                            canvas.itemconfig(raster["img_item"], state='normal')
-
-                        # Performance Guard: Huwag mag-resize pag sobrang laki na ng diff
-                        # 5000px is the sweet spot for modern CPUs to handle 30fps
-                        if (w, h) != raster["last_size"] and 5 < w < 5000:
-                            # Using NEAREST is mandatory here para hindi mag-lag 'yung main thread
-                            resized = raster["master_img"].resize((int(w), int(h)), Image.Resampling.NEAREST)
-                            raster["photo_img"] = ImageTk.PhotoImage(resized)
-                            canvas.itemconfig(raster["img_item"], image=raster["photo_img"])
-                            raster["last_size"] = (w, h)
-
-                        # Sync image position to the anchor box
-                        canvas.coords(raster["img_item"], x1, y1)
-                        canvas.tag_raise(raster["img_item"])
-                        
-        except Exception: 
-            pass 
-        
-        # 40ms provides a good balance between smoothness and CPU overhead
-        if not getattr(self, 'is_closing', False):
-            self.root.after(30, self._keep_image_pinned)
-
-    def _show_tif_preview(self, path):
+    def _show_tif_preview(self, path, band="all", layer_id=None):
         """High-Speed Rendering: Uses sampling and background threading to prevent UI lag."""
         if not os.path.exists(path): return
+        if layer_id is None: layer_id = path if band == "all" else f"{path}::{band}"
         
-        # 1. Calculate File Size
         file_size_mb = os.path.getsize(path) / (1024 * 1024)
-        
-        # 2. Show size in the Loading Curtain and the Console
         self.show_loading_curtain(f"Processing {file_size_mb:.1f}MB Satellite Image...")
         self.log(f"Map View: Injecting {os.path.basename(path)} ({file_size_mb:.1f} MB)")
         
         def processing_task():
             try:
                 with rasterio.open(path) as src:
-                    # 1. Coordinate Transform
                     bounds = transform_bounds(src.crs, 'EPSG:4326', *src.bounds)
                     min_lon, min_lat, max_lon, max_lat = bounds
                     
-                    # 2. Optimized Reading: Read a smaller overview for the preview
-                    # 512x512 is plenty for a map overlay and 4x faster than 1024x1024
-                    data = src.read(out_shape=(src.count, 512, 512), resampling=rasterio.enums.Resampling.bilinear)
-                    
-                    # 3. FAST STRETCH: Use a 10% sample to find percentiles (Massive speed gain)
-                    # 3. FAST STRETCH: Upgraded with Radar-awareness and Gamma boost
                     def fast_stretch(b, is_radar=False):
-                        if is_radar:
-                            # SAR data is usually in Decibels (-30 to 0) or raw backscatter.
-                            valid = b[b > -999] # Ignore deep nodata
-                            if valid.size == 0: return (b * 0).astype(np.uint8)
-                            
-                            # Fixed bounds for standard C-band SAR
-                            low, high = -25.0, 0.0
-                            stretched = np.clip((b - low) / (high - low) * 255, 0, 255)
-                            # Apply slight Gamma correction (0.8) to lift dark mid-tones
-                            return (255 * (stretched / 255) ** 0.8).astype(np.uint8)
+                        custom = getattr(self, 'custom_stretches', {}).get(path)
+                        if custom:
+                            low, high, gamma = custom['min'], custom['max'], custom['gamma']
                         else:
-                            # Standard Optical Stretch
-                            valid = b[b > 0]
-                            if valid.size == 0: return (b * 0).astype(np.uint8)
-                            sample = valid[::10] 
-                            low, high = np.percentile(sample, (2, 98))
-                            return np.clip((b - low) / (max(high - low, 1)) * 255, 0, 255).astype(np.uint8)
+                            if is_radar: low, high, gamma = -25.0, 0.0, 0.8
+                            else:
+                                valid = b[b > 0]
+                                if valid.size == 0: return (b * 0).astype(np.uint8)
+                                sample = valid[::10] 
+                                low, high = np.percentile(sample, (2, 98))
+                                gamma = 1.0
 
-                    # Create Alpha mask from the first band
-                    mask = (data[0] == 0).astype(np.uint8) * 255
-                    alpha = 255 - mask
+                        valid_mask = (b > -999) if is_radar else (b > 0)
+                        if not np.any(valid_mask): return (b * 0).astype(np.uint8)
+                        
+                        stretched = np.clip((b - low) / (max(high - low, 0.001)) * 255, 0, 255)
+                        return (255 * (stretched / 255) ** gamma).astype(np.uint8)
 
-                    # Detect if it's Sentinel-1 based on your app's naming convention
                     is_sar = "_S1_" in os.path.basename(path)
 
-                    if is_sar and src.count >= 2:
-                        # Typical S1 Dual-Pol Visualization: Red=VV, Green=VH, Blue=Ratio(VV/VH)
-                        vv = fast_stretch(data[0], is_radar=True)
-                        vh = fast_stretch(data[1], is_radar=True)
-                        
-                        # Synthetic Blue band (VV - VH in dB creates a nice structural contrast)
-                        ratio = np.clip((data[0] - data[1]) * 10, 0, 255).astype(np.uint8)
-                        img_array = np.dstack((vv, vh, ratio, alpha))
-                        
-                    elif src.count >= 3:
-                        r = fast_stretch(data[0])
-                        g = fast_stretch(data[1])
-                        b_band = fast_stretch(data[2])
-                        img_array = np.dstack((r, g, b_band, alpha))
-                        
-                    else:
-                        gray = fast_stretch(data[0], is_radar=is_sar)
+                    # --- THE NEW SINGLE BAND RENDERER ---
+                    if str(band) != "all":
+                        b_idx = int(band)
+                        data = src.read(b_idx, out_shape=(512, 512), resampling=rasterio.enums.Resampling.bilinear)
+                        gray = fast_stretch(data, is_radar=is_sar)
+                        mask = (data == 0).astype(np.uint8) * 255
+                        alpha = 255 - mask
                         img_array = np.dstack((gray, gray, gray, alpha))
+                        
+                    # --- THE EXISTING MULTI-BAND COMPOSITOR ---
+                    else:
+                        data = src.read(out_shape=(src.count, 512, 512), resampling=rasterio.enums.Resampling.bilinear)
+                        mask = (data[0] == 0).astype(np.uint8) * 255
+                        alpha = 255 - mask
+
+                        if is_sar and src.count >= 2:
+                            vv = fast_stretch(data[0], is_radar=True)
+                            vh = fast_stretch(data[1], is_radar=True)
+                            ratio = np.clip((data[0] - data[1]) * 10, 0, 255).astype(np.uint8)
+                            img_array = np.dstack((vv, vh, ratio, alpha))
+                        elif src.count >= 3:
+                            r = fast_stretch(data[0])
+                            g = fast_stretch(data[1])
+                            b_band = fast_stretch(data[2])
+                            img_array = np.dstack((r, g, b_band, alpha))
+                        else:
+                            gray = fast_stretch(data[0], is_radar=is_sar)
+                            img_array = np.dstack((gray, gray, gray, alpha))
 
                     base_pil_image = Image.fromarray(img_array, 'RGBA')
 
-                # 4. Schedule UI update on the main thread
-                self.root.after(0, lambda: self._finalize_preview_ui(path, base_pil_image, max_lat, min_lon, min_lat, max_lon))
+                # Pass layer_id instead of path to the finalizer
+                self.root.after(0, lambda: self._finalize_preview_ui(layer_id, base_pil_image, max_lat, min_lon, min_lat, max_lon))
 
             except Exception as e:
-                # We 'capture' the error message as a string (err) immediately
                 self.root.after(0, lambda err=str(e): self.log(f"Render Error: {err}"))
             finally:
                 self.root.after(0, self.hide_loading_curtain)
 
         threading.Thread(target=processing_task, daemon=True).start()
 
-    def _finalize_preview_ui(self, path, base_pil_image, max_lat, min_lon, min_lat, max_lon):
+    def _finalize_preview_ui(self, layer_id, base_pil_image, max_lat, min_lon, min_lat, max_lon):
         """Updates the map canvas once the background processing is done."""
         with self.raster_lock:
-            # Fit Map
             if not getattr(self, 'is_batch_loading', False):
                 self.map_widget.fit_bounding_box((max_lat, min_lon), (min_lat, max_lon))
 
-            # Create the Red Anchor Box
             box_coords = [(max_lat, min_lon), (max_lat, max_lon), (min_lat, max_lon), (min_lat, min_lon)]
             box_obj = self.map_widget.set_polygon(box_coords, outline_color="red", border_width=2, fill_color=None)
-            
-            # Create the Canvas Item
             img_item = self.map_widget.canvas.create_image(0, 0, anchor="nw", tags="sat")
 
-            self.active_rasters[path] = {
+            # Store using the unique layer_id
+            self.active_rasters[layer_id] = {
                 "img_item": img_item,
                 "box_obj": box_obj,
                 "master_img": base_pil_image,
                 "last_size": (0, 0),
-                "photo_img": None
+                "photo_img": None 
             }
 
         if not self.tracker_running:
             self.tracker_running = True
             self._keep_image_pinned()
+
+    def _keep_image_pinned(self):
+        if getattr(self, 'is_closing', False) or not self.active_rasters:
+            self.tracker_running = False
+            return 
+            
+        try:
+            canvas = self.map_widget.canvas
+            c_w, c_h = canvas.winfo_width(), canvas.winfo_height()
+            
+            with self.raster_lock: 
+                for path, raster in list(self.active_rasters.items()):
+                    if not canvas.find_withtag(raster["img_item"]): continue
+
+                    # The magic line that links Tkinter to the mapview internals
+                    poly_id = getattr(raster["box_obj"], "canvas_polygon", getattr(raster["box_obj"], "polygon", None))
+                    bbox = canvas.bbox(poly_id)
+                    
+                    if bbox:
+                        x1, y1, x2, y2 = bbox
+                        
+                        render_x1, render_y1 = max(0, x1), max(0, y1)
+                        render_x2, render_y2 = min(c_w, x2), min(c_h, y2)
+                        w, h = x2 - x1, y2 - y1
+                        
+                        if x2 < 0 or y2 < 0 or x1 > c_w or y1 > c_h:
+                            canvas.itemconfig(raster["img_item"], state='hidden')
+                            continue
+                        else:
+                            canvas.itemconfig(raster["img_item"], state='normal')
+
+                        if (w, h) != raster["last_size"] and 5 < w < 5000:
+                            resized = raster["master_img"].resize((int(w), int(h)), Image.Resampling.NEAREST)
+                            raster["photo_img"] = ImageTk.PhotoImage(resized) # Stops Garbage Collection!
+                            canvas.itemconfig(raster["img_item"], image=raster["photo_img"])
+                            raster["last_size"] = (w, h)
+
+                        canvas.coords(raster["img_item"], x1, y1)
+                        canvas.tag_raise(raster["img_item"])
+                        
+        except Exception: 
+            pass 
+        
+        if not getattr(self, 'is_closing', False):
+            self.root.after(30, self._keep_image_pinned)
 
     def close_preview(self):
         """Unselects the current record and restores the Map view."""
@@ -2500,36 +2531,154 @@ class GEE_Local_Downloader_App:
             # --- INDIVIDUAL FILE LOGIC ---
             values = self.layers_tree.item(iid, "values")
             if not values: return
+            
             path = values[0]
-            is_active = path in self.active_layer_polygons
+            band = str(values[1]) if len(values) > 1 else "all"
+            layer_id = path if band == "all" else f"{path}::{band}"
+            is_active = layer_id in self.active_layer_polygons
             
             if is_active:
-                menu.add_command(label="🚫 Remove Layer from Canvas", command=lambda: self._force_toggle_single(path, False))
+                menu.add_command(label="🚫 Remove Layer from Canvas", command=lambda: self._force_toggle_single(path, False, band))
             else:
-                menu.add_command(label="👁️ Render Layer to Canvas", command=lambda: self._force_toggle_single(path, True))
+                menu.add_command(label="👁️ Render Layer to Canvas", command=lambda: self._force_toggle_single(path, True, band))
+            
+            _, ext = os.path.splitext(path)
+            ext = ext.lower()
+            if ext in ('.tif', '.tiff'):
+                menu.add_separator()
+                menu.add_command(label="🎛️ Adjust Display (Snapseed Mode)", 
+                                 command=lambda p=path: self.open_display_adjuster(p))
 
         menu.post(event.x_root, event.y_root)
 
-    def _force_toggle_single(self, path, turn_on):
+    def open_display_adjuster(self, path):
+        """Creates a professional, Snapseed-style adjustment window for rasters."""
+        if path not in getattr(self, 'active_layer_polygons', {}):
+            from tkinter import messagebox
+            messagebox.showinfo("Layer Off", "Please double-click the layer to render it on the map first.")
+            return
+
+        adj_win = tk.Toplevel(self.root)
+        adj_win.title("Display Properties")
+        adj_win.geometry("400x340")  # Slightly wider for better proportions
+        adj_win.attributes("-topmost", True)
+        adj_win.resizable(False, False) # Lock size for a cleaner app feel
+
+        # Add a subtle, professional padding to the entire window
+        main_frame = ttk.Frame(adj_win, padding="15 15 15 15")
+        main_frame.pack(fill="both", expand=True)
+
+        # Header Title
+        filename = os.path.basename(path)
+        # Truncate beautifully if it's too long
+        display_name = (filename[:30] + '...') if len(filename) > 30 else filename
+        ttk.Label(main_frame, text=display_name, font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 15))
+
+        if not hasattr(self, 'custom_stretches'):
+            self.custom_stretches = {}
+            
+        is_sar = "_S1_" in filename
+        def_min = -25.0 if is_sar else 0.0
+        def_max = 0.0 if is_sar else 3000.0
+        def_gamma = 0.8 if is_sar else 1.0
+
+        if path not in self.custom_stretches:
+            self.custom_stretches[path] = {'min': def_min, 'max': def_max, 'gamma': def_gamma}
+
+        # --- SLIDER CONTAINER (The "Pro" Look) ---
+        slider_frame = ttk.LabelFrame(main_frame, text=" Histogram Stretch ", padding="15 10 15 15")
+        slider_frame.pack(fill="x", pady=(0, 20))
+
+        # Helper to create a slider with a live-updating numerical label
+        def create_pro_slider(parent, label_text, from_, to, initial_val):
+            row_frame = ttk.Frame(parent)
+            row_frame.pack(fill="x", pady=(10, 0))
+            
+            # Label on the left
+            ttk.Label(row_frame, text=label_text, font=("Segoe UI", 9)).pack(side="left")
+            
+            # Live value readout on the right
+            val_lbl = ttk.Label(row_frame, text=f"{initial_val:.2f}", font=("Consolas", 9, "bold"), foreground="#0078D7")
+            val_lbl.pack(side="right")
+            
+            # Slider on the bottom
+            scale = ttk.Scale(parent, from_=from_, to=to, value=initial_val)
+            scale.pack(fill="x", pady=(5, 0))
+            
+            # Update the number smoothly while dragging
+            scale.configure(command=lambda v: val_lbl.config(text=f"{float(v):.2f}"))
+            
+            return scale, val_lbl
+
+        # Build the sliders
+        min_scale, min_lbl = create_pro_slider(slider_frame, "Black Point (Min):", 
+                                               -40 if is_sar else 0, 0 if is_sar else 5000, 
+                                               self.custom_stretches[path]['min'])
+                                               
+        max_scale, max_lbl = create_pro_slider(slider_frame, "White Point (Max):", 
+                                               -20 if is_sar else 100, 10 if is_sar else 10000, 
+                                               self.custom_stretches[path]['max'])
+                                               
+        gamma_scale, gamma_lbl = create_pro_slider(slider_frame, "Mid-tone Boost (Gamma):", 
+                                                   0.1, 3.0, 
+                                                   self.custom_stretches[path]['gamma'])
+
+        # --- LIVE UPDATE ENGINE ---
+        def apply_live_update(event=None):
+            self.custom_stretches[path] = {
+                'min': min_scale.get(),
+                'max': max_scale.get(),
+                'gamma': gamma_scale.get()
+            }
+            self._show_tif_preview(path)
+
+        def reset_to_defaults():
+            min_scale.set(def_min)
+            max_scale.set(def_max)
+            gamma_scale.set(def_gamma)
+            
+            # Force the labels to update text immediately
+            min_lbl.config(text=f"{def_min:.2f}")
+            max_lbl.config(text=f"{def_max:.2f}")
+            gamma_lbl.config(text=f"{def_gamma:.2f}")
+            
+            apply_live_update()
+
+        # Bind heavy map rendering strictly to mouse release
+        min_scale.bind("<ButtonRelease-1>", apply_live_update)
+        max_scale.bind("<ButtonRelease-1>", apply_live_update)
+        gamma_scale.bind("<ButtonRelease-1>", apply_live_update)
+
+        # --- BUTTONS ---
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(fill="x")
+        
+        # Pushing buttons to the right side
+        ttk.Button(btn_frame, text="Done", command=adj_win.destroy, style="Accent.TButton").pack(side="right", padx=(10, 0))
+        ttk.Button(btn_frame, text="Reset", command=reset_to_defaults).pack(side="right")
+
+    def _force_toggle_single(self, path, turn_on, band="all"):
         """Programmatically renders or hides a single layer via the right-click menu."""
+        layer_id = path if band == "all" else f"{path}::{band}"
+        
         if turn_on:
-            if path.endswith('.tif'):
-                self._show_tif_preview(path)
-                self.active_layer_polygons[path] = True
+            if path.endswith('.tif') or path.endswith('.tiff'):
+                self._show_tif_preview(path, band=band, layer_id=layer_id)
+                self.active_layer_polygons[layer_id] = True
             elif path.endswith('.geojson') or path.endswith('.shp'):
                 self._draw_layer_to_map(path)
         else:
             # Hiding logic
-            if path.endswith('.tif') and hasattr(self, 'active_rasters'):
-                if path in self.active_rasters:
-                    raster = self.active_rasters[path]
+            if path.endswith('.tif') or path.endswith('.tiff'):
+                if hasattr(self, 'active_rasters') and layer_id in self.active_rasters:
+                    raster = self.active_rasters[layer_id]
                     self.map_widget.canvas.delete(raster["img_item"])
                     try: raster["box_obj"].delete()
                     except: pass
-                    del self.active_rasters[path]
+                    del self.active_rasters[layer_id]
                     
             elif path.endswith('.geojson') or path.endswith('.shp'):
-                layer_data = self.active_layer_polygons.get(path)
+                layer_data = self.active_layer_polygons.get(layer_id)
                 if isinstance(layer_data, dict):
                     for poly in layer_data.get("polygons", []):
                         try: poly.delete()
@@ -2537,16 +2686,15 @@ class GEE_Local_Downloader_App:
                     for lbl in layer_data.get("active_labels", []):
                         try: lbl.delete()
                         except: pass
-                elif isinstance(layer_data, list): # Fallback
+                elif isinstance(layer_data, list): 
                     for poly in layer_data:
                         try: poly.delete()
                         except: pass
                         
-            if path in self.active_layer_polygons:
-                del self.active_layer_polygons[path]
+            if layer_id in self.active_layer_polygons:
+                del self.active_layer_polygons[layer_id]
                 self.log(f"Layer manually hidden: {os.path.basename(path)}")
                 
-        # Instantly update the checkboxes
         self.populate_layers_tree()
 
     def toggle_folder_contents(self, folder_iid, turn_on, folder_name):
@@ -2636,24 +2784,41 @@ class GEE_Local_Downloader_App:
                     
                 # --- ENHANCED FILE SCANNER ---
                 for file_name in files:
-                    # Use .lower() to ensure .TIF and .tiff are caught
                     ext = os.path.splitext(file_name)[1].lower()
                     
                     if ext in ('.geojson', '.tif', '.tiff', '.shp'):
                         file_path = os.path.normpath(os.path.join(parent_path, file_name))
                         
                         # Dynamic Icon Mapping
-                        if ext == '.shp': 
-                            icon = "📐" 
-                        elif ext == '.geojson': 
-                            icon = "📍"
-                        else: 
-                            icon = "🗺️" # For .tif and .tiff
+                        if ext == '.shp': icon = "📐" 
+                        elif ext == '.geojson': icon = "📍"
+                        else: icon = "🗺️" 
                             
-                        checkbox = "☑ " if file_path in active_paths else "☐ "
+                        # Unique ID for parent (The full composite image)
+                        parent_id = file_path 
+                        checkbox = "☑ " if parent_id in self.active_layer_polygons else "☐ "
+
+                        is_open = parent_id in open_folders
                         
-                        # We use the full path in 'values' so toggle_map_layer knows exactly what to load
-                        self.layers_tree.insert(parent_node, "end", text=f"{checkbox}{icon} {file_name}", values=(file_path,))
+                        # Insert parent
+                        p_node = self.layers_tree.insert(parent_node, "end", iid=parent_id, text=f"{checkbox}{icon} {file_name}", values=(file_path, "all"), open=is_open)
+                        
+                        # NEW: Peek inside TIF files to build child Band nodes
+                        if ext in ('.tif', '.tiff'):
+                            try:
+                                with rasterio.open(file_path) as src:
+                                    band_count = src.count
+                                    descriptions = src.descriptions
+                                    
+                                    if band_count > 1:
+                                        for i in range(1, band_count + 1):
+                                            b_name = descriptions[i-1] if (descriptions and descriptions[i-1]) else f"Band {i}"
+                                            b_id = f"{file_path}::{i}"
+                                            b_check = "☑ " if b_id in self.active_layer_polygons else "☐ "
+                                            
+                                            self.layers_tree.insert(p_node, "end", iid=b_id, text=f"  {b_check}↳ {b_name}", values=(file_path, i))
+                            except Exception as e:
+                                pass
                         
             except PermissionError:
                 pass
@@ -2661,47 +2826,48 @@ class GEE_Local_Downloader_App:
         add_nodes(data_dir, "")
 
     def toggle_map_layer(self, event):
-        """Routes files to the interactive map. Handles both Vectors and Rasters."""
-        # 1. Identify exactly what row the mouse was hovering over
+        """Routes files to the interactive map. Handles Parent Composites and Child Bands."""
+
+        if self.layers_tree.identify_element(event.x, event.y) == "Treeitem.indicator":
+            return
+        
         item_id = self.layers_tree.identify_row(event.y)
         if not item_id: return
         
         values = self.layers_tree.item(item_id, "values")
-        if not values: return # Folder clicked
+        if not values: return 
         
-        # Path Normalization is key for the "is it already on?" check
         path = os.path.normpath(values[0])
+        band = str(values[1]) if len(values) > 1 else "all"
+        layer_id = path if band == "all" else f"{path}::{band}"
         ext = os.path.splitext(path)[1].lower()
         
         # --- IF TIFF: Handle Native Image Tracking Overlay ---
         if ext in ('.tif', '.tiff'):
             if not hasattr(self, 'active_rasters'): self.active_rasters = {}
             
-            if path in self.active_layer_polygons:
+            if layer_id in self.active_layer_polygons:
                 # TURN OFF logic
-                if path in self.active_rasters:
-                    raster = self.active_rasters[path]
+                if layer_id in self.active_rasters:
+                    raster = self.active_rasters[layer_id]
                     self.map_widget.canvas.delete(raster["img_item"])
                     try: raster["box_obj"].delete()
                     except: pass
-                    del self.active_rasters[path]
+                    del self.active_rasters[layer_id]
                 
-                del self.active_layer_polygons[path]
-                self.log(f"Satellite overlay hidden: {os.path.basename(path)}")
+                del self.active_layer_polygons[layer_id]
+                self.log(f"Satellite overlay hidden: {os.path.basename(path)} (Layer: {band})")
             else:
                 # TURN ON logic
-                # This calls _show_tif_preview which uses rasterio to auto-calculate 
-                # bounds, making it compatible with GEE AND manual files.
-                self._show_tif_preview(path)
-                self.active_layer_polygons[path] = True 
+                self._show_tif_preview(path, band=band, layer_id=layer_id)
+                self.active_layer_polygons[layer_id] = True 
             
             self.populate_layers_tree()
             return
 
         # --- IF GEOJSON / SHP: Toggle interactive map polygon ---
-        if path in self.active_layer_polygons:
-            layer_data = self.active_layer_polygons[path]
-            # Handle structured dictionary or raw list for backward compatibility
+        if layer_id in self.active_layer_polygons:
+            layer_data = self.active_layer_polygons[layer_id]
             to_delete = []
             if isinstance(layer_data, dict):
                 to_delete = layer_data.get("polygons", []) + layer_data.get("active_labels", [])
@@ -2712,7 +2878,7 @@ class GEE_Local_Downloader_App:
                 try: obj.delete()
                 except: pass
 
-            del self.active_layer_polygons[path]
+            del self.active_layer_polygons[layer_id]
             self.log(f"Layer hidden: {os.path.basename(path)}")
             self.populate_layers_tree() 
         else:
@@ -3689,6 +3855,16 @@ class GEE_Local_Downloader_App:
 
     def _download_worker(self, path, save_p, date_list):
         """High-Fidelity Batch Downloader: Preserves all swath-checks and stitching logic."""
+
+        def apply_speckle_filter(img):
+            """Reduces the 'salt and pepper' noise using a 3x3 Boxcar filter."""
+            return img.focal_mean(1.5, 'circle', 'meters')
+
+        def convert_to_db(img):
+            """Converts linear backscatter to Decibels (dB) for better contrast."""
+            # We use 10 * log10(Linear). We add a tiny offset (0.0001) to avoid log(0) errors.
+            return img.log10().multiply(10)
+
         try:
 
             # 1. ROOT WORKSPACE SETUP
@@ -3805,8 +3981,11 @@ class GEE_Local_Downloader_App:
                     scale = 30
                 elif "Sentinel-1" in ds_name:
                     col = ee.ImageCollection('COPERNICUS/S1_GRD').filterBounds(roi).filterDate(d_start, d_end)
+                    col = col.filter(ee.Filter.eq('instrumentMode', 'IW'))
                     if col.size().getInfo() == 0: continue
                     img = col.mosaic()
+                    img = apply_speckle_filter(img)
+                    # img = convert_to_db(img)
                     selected = [n for n, v in {"VV":self.s1_bands["VV (Vertical)"], "VH":self.s1_bands["VH (Horizontal)"]}.items() if v.get()]
                     img = img.select(selected if selected else ['VV'])
                     scale = 10
